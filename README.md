@@ -74,8 +74,8 @@ Scribe supports the following audio formats (via Azure Speech Fast Transcription
 Configuration is managed through `appsettings.json`. The file contains:
 
 - **Logging**: Log level configuration (defaults to Warning)
-- **Transcription**: Settings for the transcription service (Whisper)
-- **Completion**: Settings for the completion service (GPT-4o-mini)
+- **Transcription**: Settings for Azure AI Speech (Fast Transcription)
+- **Completion**: Settings for Azure OpenAI (o4-mini)
 
 See `appsettings.example.json` for the full structure.
 
@@ -85,7 +85,6 @@ Scribe creates a directory for each meeting transcript, containing:
 - **`transcript.html`** - Interactive HTML report with summary and transcript
 - **`transcript.json`** - Structured data (metadata, summary, turns)
 - **`fast-transcription-raw.json`** - Raw Azure Speech API response
-- Copy of the original audio file
 - `scribe.log` - Log file (only if warnings/errors occurred)
 
 ## Features
