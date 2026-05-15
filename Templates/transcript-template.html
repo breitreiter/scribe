@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en" x-data="{ darkMode: false }" :class="{ 'dark': darkMode }">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meeting Transcript</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        [x-cloak] { display: none !important; }
+
+        .speaker-1 { color: #3b82f6; }
+        .speaker-2 { color: #8b5cf6; }
+        .speaker-3 { color: #ec4899; }
+        .speaker-4 { color: #f59e0b; }
+        .speaker-5 { color: #10b981; }
+        .speaker-6 { color: #06b6d4; }
+        .speaker-7 { color: #6366f1; }
+        .speaker-8 { color: #f97316; }
+        .speaker-9 { color: #14b8a6; }
+        .speaker-10 { color: #a855f7; }
+
+        .dark .speaker-1 { color: #60a5fa; }
+        .dark .speaker-2 { color: #a78bfa; }
+        .dark .speaker-3 { color: #f472b6; }
+        .dark .speaker-4 { color: #fbbf24; }
+        .dark .speaker-5 { color: #34d399; }
+        .dark .speaker-6 { color: #22d3ee; }
+        .dark .speaker-7 { color: #818cf8; }
+        .dark .speaker-8 { color: #fb923c; }
+        .dark .speaker-9 { color: #2dd4bf; }
+        .dark .speaker-10 { color: #c084fc; }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
+
+    <!-- Embedded Transcript Data -->
+    <script id="transcript-data" type="application/json">
+{{TRANSCRIPT_JSON}}
+    </script>
+
+    <!-- Main App -->
+    <div x-data="transcriptApp()" x-cloak>
+
+        <!-- Sticky Header -->
+        <header class="sticky top-0 z-50 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex-1 min-w-0">
+                        <h1 class="text-2xl font-bold text-gray-900 dark:text-white truncate" x-text="transcript.metadata.meetingTitle || 'Meeting Transcript'"></h1>
+                        <p class="mt-1 text-sm text-gray-600 dark:text-gray-400" x-text="transcript.summary?.oneLiner || ''"></p>
+                    </div>
+                    <div class="ml-4 flex items-center space-x-4">
+                        <!-- Dark Mode Toggle -->
+                        <button @click="darkMode = !darkMode"
+                                class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                            <svg x-show="!darkMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+                            </svg>
+                            <svg x-show="darkMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                            </svg>
+                        </button>
+                        <!-- Placeholder Media Controls (Disabled) -->
+                        <div class="flex items-center space-x-2 opacity-50">
+                            <button disabled class="p-2 rounded-lg bg-gray-100 dark:bg-gray-700">
+                                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path>
+                                </svg>
+                            </button>
+                            <span class="text-xs text-gray-500">00:00 / <span x-text="formatDuration(transcript.metadata.durationSeconds)"></span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div class="flex flex-col md:flex-row gap-6 lg:gap-8 max-w-[1400px] mx-auto">
+
+                <!-- AI Summary Panel (Left - 40%) -->
+                <aside class="w-full md:w-2/5 md:max-w-[650px]">
+                    <div class="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto">
+                        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                            <h2 class="text-lg font-bold mb-4 text-gray-900 dark:text-white">Summary</h2>
+
+                            <!-- Overview -->
+                            <div class="mb-6" x-show="transcript.summary?.overview">
+                                <p class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed" x-text="transcript.summary?.overview"></p>
+                            </div>
+
+                            <!-- Key Points -->
+                            <div class="mb-6" x-show="transcript.summary?.keyPoints && transcript.summary.keyPoints.length > 0">
+                                <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Key Points</h3>
+                                <ul class="space-y-3">
+                                    <template x-for="(keyPoint, index) in transcript.summary.keyPoints" :key="index">
+                                        <li>
+                                            <a @click.prevent="scrollToTurn(keyPoint.turnIndices[0])"
+                                               href="#"
+                                               class="group block text-sm text-gray-700 dark:text-gray-300 hover:text-primary dark:hover:text-primary transition-colors cursor-pointer">
+                                                <div class="flex items-start gap-2">
+                                                    <svg class="w-4 h-4 text-primary flex-shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
+                                                    </svg>
+                                                    <span x-text="keyPoint.point"></span>
+                                                </div>
+                                            </a>
+                                        </li>
+                                    </template>
+                                </ul>
+                            </div>
+
+                            <!-- Action Items -->
+                            <div x-show="transcript.summary?.actionItems && transcript.summary.actionItems.length > 0">
+                                <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Action Items</h3>
+                                <ul class="space-y-3">
+                                    <template x-for="(actionItem, index) in transcript.summary.actionItems" :key="index">
+                                        <li>
+                                            <a @click.prevent="scrollToTurn(actionItem.turnIndices[0])"
+                                               href="#"
+                                               class="group block text-sm cursor-pointer">
+                                                <div class="flex items-start gap-2">
+                                                    <svg class="w-5 h-5 text-green-500 dark:text-green-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                                                    </svg>
+                                                    <div class="flex-1">
+                                                        <p class="text-gray-700 dark:text-gray-300 group-hover:text-primary dark:group-hover:text-primary transition-colors" x-text="actionItem.item"></p>
+                                                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1" x-show="actionItem.assignedTo">
+                                                            Assigned to: <span x-text="actionItem.assignedTo"></span>
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </a>
+                                        </li>
+                                    </template>
+                                </ul>
+                            </div>
+
+                            <!-- Meeting Metadata -->
+                            <div class="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+                                <div class="grid grid-cols-2 gap-3 text-xs">
+                                    <div>
+                                        <span class="text-gray-500 dark:text-gray-400">Date:</span>
+                                        <div class="font-medium mt-1" x-text="transcript.metadata.recordingDate || 'N/A'"></div>
+                                    </div>
+                                    <div>
+                                        <span class="text-gray-500 dark:text-gray-400">Duration:</span>
+                                        <div class="font-medium mt-1" x-text="formatDuration(transcript.metadata.durationSeconds)"></div>
+                                    </div>
+                                    <div>
+                                        <span class="text-gray-500 dark:text-gray-400">Speakers:</span>
+                                        <div class="font-medium mt-1" x-text="transcript.metadata.speakerCount"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </aside>
+
+                <!-- Transcript Panel (Right - 60%) -->
+                <main class="w-full md:w-3/5 md:max-w-[700px]">
+                    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                        <h2 class="text-lg font-bold mb-6 text-gray-900 dark:text-white">Transcript</h2>
+
+                        <!-- Transcript Turns -->
+                        <div class="space-y-6">
+                            <template x-for="(turn, index) in transcript.turns" :key="index">
+                                <div :id="'turn-' + index" class="flex gap-4 scroll-mt-24">
+                                    <!-- Speaker & Time -->
+                                    <div class="flex-shrink-0 w-28">
+                                        <div :class="'speaker-' + turn.speaker + ' font-semibold text-sm'" x-text="turn.speakerName"></div>
+                                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                            <span x-text="turn.startTime"></span>
+                                        </div>
+                                    </div>
+                                    <!-- Text -->
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed" x-text="turn.text"></p>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </main>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="mt-16 py-8 border-t border-gray-200 dark:border-gray-700">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <p class="text-center text-sm text-gray-500 dark:text-gray-400">
+                    Generated by Scribe - Meeting Transcription Tool
+                </p>
+            </div>
+        </footer>
+
+    </div>
+
+    <!-- Alpine.js App Logic -->
+    <script>
+        function transcriptApp() {
+            return {
+                transcript: {},
+
+                init() {
+                    // Load transcript data from embedded JSON
+                    const dataElement = document.getElementById('transcript-data');
+                    this.transcript = JSON.parse(dataElement.textContent);
+
+                    // Update page title
+                    document.title = this.transcript.metadata?.meetingTitle || 'Meeting Transcript';
+                },
+
+                formatDuration(seconds) {
+                    if (!seconds) return '0:00';
+                    const hours = Math.floor(seconds / 3600);
+                    const minutes = Math.floor((seconds % 3600) / 60);
+                    const secs = Math.floor(seconds % 60);
+
+                    if (hours > 0) {
+                        return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                    }
+                    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+                },
+
+                scrollToTurn(turnIndex) {
+                    if (turnIndex === undefined || turnIndex === null) return;
+                    const element = document.getElementById('turn-' + turnIndex);
+                    if (element) {
+                        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        // Briefly highlight the turn
+                        element.classList.add('bg-blue-50', 'dark:bg-blue-900/20', '-mx-2', 'px-2', 'rounded');
+                        setTimeout(() => {
+                            element.classList.remove('bg-blue-50', 'dark:bg-blue-900/20', '-mx-2', 'px-2', 'rounded');
+                        }, 2000);
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>

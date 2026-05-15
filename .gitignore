@@ -1,0 +1,21 @@
+# User-specific settings
+appsettings.json
+
+# Build results
+bin/
+obj/
+
+# Output directories (generated meeting transcripts/summaries)
+output/
+samples/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+scribe.imp-proposals/
+.imp/
