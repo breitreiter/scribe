@@ -109,6 +109,7 @@ public class TranscriptionService
 
         // Generate AI summary if summary service is available
         bool summaryGenerated = false;
+        string? meetingTitle = null;
         if (_summaryService != null)
         {
             Log.Information("Generating AI summary...");
@@ -116,7 +117,16 @@ public class TranscriptionService
             {
                 var summary = await _summaryService.GenerateSummaryAsync(transcript);
                 transcript.Summary = summary;
+
+                if (!string.IsNullOrWhiteSpace(summary.OneLiner))
+                {
+                    meetingTitle = summary.OneLiner.TrimEnd('.', '!', '?').Trim();
+                    if (meetingTitle.Length > 100) meetingTitle = meetingTitle[..100].TrimEnd();
+                    transcript.Metadata.MeetingTitle = meetingTitle;
+                }
+
                 await SaveTranscriptAsync(transcript, transcriptPath);
+                await HtmlReportGenerator.GenerateHtmlReport(transcript, htmlPath);
                 Log.Information("AI summary generated and saved");
                 summaryGenerated = true;
             }
@@ -131,6 +141,7 @@ public class TranscriptionService
         result.TranscriptPath = transcriptPath;
         result.HtmlPath = htmlPath;
         result.SummaryGenerated = summaryGenerated;
+        result.MeetingTitle = meetingTitle;
 
         Log.Information("Transcription complete!");
         Log.Information("  Duration: {Duration:F1}s", result.DurationSeconds);

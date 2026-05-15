@@ -13,6 +13,7 @@ public class TranscriptionResult
     public string TranscriptPath { get; set; } = string.Empty;
     public string HtmlPath { get; set; } = string.Empty;
     public bool SummaryGenerated { get; set; }
+    public string? MeetingTitle { get; set; }
 }
 
 public class TranscriptionSegment

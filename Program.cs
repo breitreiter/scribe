@@ -97,11 +97,8 @@ class Program
                 AnsiConsole.MarkupLine($"[cyan]{audioFilePath.EscapeMarkup()}[/]");
                 AnsiConsole.WriteLine();
 
-                // TODO: Get meeting title from user and create output directory
-                // TODO: Initialize logger once we have the output directory
-                // For now, create a temporary output directory for testing
-                var sanitizedTitle = "temp-meeting"; // Will be replaced with actual sanitized title
-                outputDirectory = Path.Combine(Directory.GetCurrentDirectory(), sanitizedTitle);
+                var tempName = $"meeting-{DateTime.Now:yyyyMMdd-HHmmss}";
+                outputDirectory = Path.Combine(Directory.GetCurrentDirectory(), tempName);
                 Directory.CreateDirectory(outputDirectory);
             }
             else
@@ -181,11 +178,15 @@ class Program
                         var summary = await summaryService.GenerateSummaryAsync(transcript);
                         transcript.Summary = summary;
 
-                        // Re-save the transcript with the updated summary
-                        var updatedJson = System.Text.Json.JsonSerializer.Serialize(transcript,
-                            new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-                        await File.WriteAllTextAsync(transcriptPath, updatedJson);
+                        if (!string.IsNullOrWhiteSpace(summary.OneLiner))
+                        {
+                            var title = summary.OneLiner.TrimEnd('.', '!', '?').Trim();
+                            if (title.Length > 100) title = title[..100].TrimEnd();
+                            transcript.Metadata.MeetingTitle = title;
+                        }
 
+                        await File.WriteAllTextAsync(transcriptPath,
+                            JsonSerializer.Serialize(transcript, Json.Indented));
                         Log.Information("AI summary generated and saved");
                         AnsiConsole.MarkupLine("[green]✓[/] AI summary generated");
                     }
@@ -213,10 +214,12 @@ class Program
                     Provider = "AzureSpeechFast",
                     DurationSeconds = transcript.Metadata.DurationSeconds,
                     Language = appSettings.Transcription.AzureSpeech.Locale,
-                    Segments = new List<Scribe.Models.TranscriptionSegment>(), // Not needed for display
+                    Segments = new List<Scribe.Models.TranscriptionSegment>(),
                     RawJsonPath = rawJsonPath,
                     TranscriptPath = transcriptPath,
-                    HtmlPath = htmlPath
+                    HtmlPath = htmlPath,
+                    MeetingTitle = transcript.Metadata.MeetingTitle,
+                    SummaryGenerated = transcript.Summary?.KeyPoints?.Count > 0
                 };
             }
             else
@@ -258,6 +261,26 @@ class Program
                                 ctx.Status($"Transcription status: [cyan]{status}[/]");
                             });
                     });
+
+                // Rename output directory to sanitized meeting title
+                if (!string.IsNullOrEmpty(transcription.MeetingTitle))
+                {
+                    var sanitized = SanitizeTitle(transcription.MeetingTitle);
+                    var newDir = ResolveUniqueDirectory(Directory.GetCurrentDirectory(), sanitized);
+                    try
+                    {
+                        Directory.Move(outputDirectory!, newDir);
+                        transcription.RawJsonPath = Path.Combine(newDir, Path.GetFileName(transcription.RawJsonPath));
+                        transcription.TranscriptPath = Path.Combine(newDir, Path.GetFileName(transcription.TranscriptPath));
+                        transcription.HtmlPath = Path.Combine(newDir, Path.GetFileName(transcription.HtmlPath));
+                        logFilePath = Path.Combine(newDir, "scribe.log");
+                        outputDirectory = newDir;
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Warning(ex, "Could not rename output directory");
+                    }
+                }
             }
 
             if (isDirectoryInput)
@@ -271,6 +294,9 @@ class Program
                     AnsiConsole.MarkupLine("[yellow]![/] AI summary could not be generated — check scribe.log for details.");
             }
 
+            if (!string.IsNullOrEmpty(transcription.MeetingTitle))
+                AnsiConsole.MarkupLine($"  Meeting: [bold]{transcription.MeetingTitle.EscapeMarkup()}[/]");
+
             AnsiConsole.MarkupLine($"  Duration: [cyan]{transcription.DurationSeconds:F1}s[/]");
             AnsiConsole.MarkupLine($"  Language: [cyan]{transcription.Language}[/]");
 
@@ -281,18 +307,9 @@ class Program
                 AnsiConsole.MarkupLine($"  Speakers identified: [cyan]{uniqueSpeakers}[/]");
             }
 
-            AnsiConsole.MarkupLine($"  Transcript JSON: [cyan]{transcription.TranscriptPath}[/]");
-            AnsiConsole.MarkupLine($"  HTML Report: [cyan]{transcription.HtmlPath}[/]");
+            AnsiConsole.MarkupLine($"  HTML Report: [cyan]{transcription.HtmlPath.EscapeMarkup()}[/]");
+            AnsiConsole.MarkupLine($"  Transcript: [cyan]{transcription.TranscriptPath.EscapeMarkup()}[/]");
             AnsiConsole.WriteLine();
-
-            // TODO: Ask for meeting title and purpose
-            // TODO: Walk user through speaker name assignment
-            // TODO: Generate formatted transcript
-            // TODO: Generate summary
-
-            AnsiConsole.MarkupLine("[yellow]Note:[/] Additional workflow steps not yet implemented.");
-            AnsiConsole.Write("Raw transcription saved to: ");
-            AnsiConsole.MarkupLine($"[cyan]{transcription.RawJsonPath.EscapeMarkup()}[/]");
 
             return 0;
         }
@@ -312,6 +329,29 @@ class Program
                 File.Delete(logFilePath);
             }
         }
+    }
+
+    private static string SanitizeTitle(string title)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var c in title.ToLowerInvariant())
+        {
+            if (char.IsLetterOrDigit(c)) sb.Append(c);
+            else if (c is ' ' or '-' or '_') sb.Append('-');
+        }
+        var result = sb.ToString().Trim('-');
+        while (result.Contains("--")) result = result.Replace("--", "-");
+        if (result.Length > 100) result = result[..100].TrimEnd('-');
+        return string.IsNullOrEmpty(result) ? "meeting" : result;
+    }
+
+    private static string ResolveUniqueDirectory(string parentDir, string baseName)
+    {
+        var path = Path.Combine(parentDir, baseName);
+        if (!Directory.Exists(path)) return path;
+        var i = 2;
+        while (Directory.Exists(Path.Combine(parentDir, $"{baseName}-{i}"))) i++;
+        return Path.Combine(parentDir, $"{baseName}-{i}");
     }
 
     // Returns null and prints an error if the raw JSON cannot be parsed.

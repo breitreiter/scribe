@@ -87,13 +87,9 @@ public class TranscriptFormatter
                 RecordingDate = DateTime.Now.ToString("yyyy-MM-dd"),
                 SpeakerCount = speakerCount,
                 Speakers = speakers,
-                MeetingTitle = "[Placeholder] Meeting Title",
-                MeetingPurpose = null
             },
             Summary = new TranscriptSummary
             {
-                OneLiner = "[Coming soon] AI-generated summary will appear here",
-                Overview = null,
                 ActionItems = new List<SummaryActionItem>()
             },
             Topics = new List<TranscriptTopic>
