@@ -18,15 +18,14 @@ public class SummaryService
     public SummaryService(AzureOpenAISettings settings)
     {
         _settings = settings;
-        // o4-mini requires API version 2024-12-01-preview or later
-        var clientOptions = new AzureOpenAIClientOptions(AzureOpenAIClientOptions.ServiceVersion.V2024_12_01_Preview);
-        var azureClient = new AzureOpenAIClient(
-            new Uri(_settings.Endpoint),
-            new AzureKeyCredential(_settings.ApiKey),
-            clientOptions);
+        var parsed = new Uri(_settings.Endpoint);
+        var baseUri = new Uri($"{parsed.Scheme}://{parsed.Authority}/");
 
-        // Use Microsoft.Extensions.AI abstraction for unified interface
-        _chatClient = azureClient.GetChatClient(_settings.DeploymentName).AsIChatClient();
+        var clientOptions = new AzureOpenAIClientOptions(AzureOpenAIClientOptions.ServiceVersion.V2025_03_01_Preview);
+        var azureClient = new AzureOpenAIClient(baseUri, new AzureKeyCredential(_settings.ApiKey), clientOptions);
+
+        var model = _settings.ModelName ?? _settings.DeploymentName;
+        _chatClient = azureClient.GetResponsesClient().AsIChatClient(model);
     }
 
     public async Task<TranscriptSummary> GenerateSummaryAsync(Transcript transcript)
