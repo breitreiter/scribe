@@ -4,78 +4,57 @@ namespace Scribe.Services;
 
 public class TranscriptFormatter
 {
-    private static readonly string[] SpeakerNames = new[]
-    {
-        "Alice", "Bob", "Charles", "Dave", "Edward", "Francis",
-        "George", "Henrietta", "Ivan", "Jane"
-    };
+    private const double TurnSplitPauseSeconds = 2.0;
 
-    public static Transcript FormatTranscript(FastTranscriptionResult fastResult)
+    public static Transcript FormatTranscript(RawTranscript raw)
     {
-        var speakerCount = fastResult.Phrases?
-            .Select(p => p.Speaker ?? 0)
-            .Distinct()
-            .Count() ?? 0;
-
-        // Build speaker name mapping
-        var speakers = new Dictionary<int, string>();
-        for (int i = 1; i <= speakerCount; i++)
+        // Display IDs come from order of first appearance, never from the producer's
+        // label: WhisperX labels are strings, Azure's integers may have gaps, and
+        // neither is guaranteed contiguous.
+        var speakerIds = new Dictionary<string, int>();
+        foreach (var segment in raw.Segments)
         {
-            speakers[i] = i <= SpeakerNames.Length
-                ? SpeakerNames[i - 1]
-                : $"Speaker {i}";
+            if (segment.Speaker != null && !speakerIds.ContainsKey(segment.Speaker))
+                speakerIds[segment.Speaker] = speakerIds.Count + 1;
         }
 
-        // Group phrases into turns (split on >2 second pauses)
+        // Neutral labels only. A name here would be a factual claim that a person
+        // attended and holds a view; names come from a human, once identification lands.
+        var speakers = speakerIds.Values.ToDictionary(id => id, id => $"Speaker {id}");
+
+        int IdOf(RawSegment segment) =>
+            segment.Speaker != null ? speakerIds[segment.Speaker] : 0;
+
+        string NameOf(RawSegment segment) =>
+            segment.Speaker != null ? speakers[speakerIds[segment.Speaker]] : "Unidentified speaker";
+
         var turns = new List<TranscriptTurn>();
 
-        if (fastResult.Phrases != null && fastResult.Phrases.Length > 0)
+        if (raw.Segments.Count > 0)
         {
-            var currentTurn = new TranscriptTurn
+            var currentTurn = NewTurn(raw.Segments[0]);
+
+            for (int i = 1; i < raw.Segments.Count; i++)
             {
-                Speaker = fastResult.Phrases[0].Speaker ?? 0,
-                SpeakerName = speakers.GetValueOrDefault(fastResult.Phrases[0].Speaker ?? 0, "Unknown"),
-                StartTime = FormatTime(fastResult.Phrases[0].OffsetMilliseconds),
-                Text = fastResult.Phrases[0].Text ?? string.Empty
-            };
+                var segment = raw.Segments[i];
+                var previous = raw.Segments[i - 1];
 
-            for (int i = 1; i < fastResult.Phrases.Length; i++)
-            {
-                var phrase = fastResult.Phrases[i];
-                var prevPhrase = fastResult.Phrases[i - 1];
+                var pause = segment.StartSeconds - previous.EndSeconds;
+                var sameSpeaker = segment.Speaker == previous.Speaker;
 
-                var pauseDuration = phrase.OffsetMilliseconds -
-                    (prevPhrase.OffsetMilliseconds + prevPhrase.DurationMilliseconds);
-
-                var sameSpeaker = phrase.Speaker == currentTurn.Speaker;
-                var shortPause = pauseDuration <= 2000; // 2 seconds or less
-
-                if (sameSpeaker && shortPause)
+                if (sameSpeaker && pause <= TurnSplitPauseSeconds)
                 {
-                    // Continue current turn
-                    currentTurn.Text += " " + (phrase.Text ?? string.Empty);
+                    currentTurn.Text += " " + segment.Text;
                 }
                 else
                 {
-                    // End current turn, start new one
-                    currentTurn.EndTime = FormatTime(
-                        prevPhrase.OffsetMilliseconds + prevPhrase.DurationMilliseconds);
+                    currentTurn.EndTime = FormatTime(previous.EndSeconds);
                     turns.Add(currentTurn);
-
-                    currentTurn = new TranscriptTurn
-                    {
-                        Speaker = phrase.Speaker ?? 0,
-                        SpeakerName = speakers.GetValueOrDefault(phrase.Speaker ?? 0, "Unknown"),
-                        StartTime = FormatTime(phrase.OffsetMilliseconds),
-                        Text = phrase.Text ?? string.Empty
-                    };
+                    currentTurn = NewTurn(segment);
                 }
             }
 
-            // Add the last turn
-            var lastPhrase = fastResult.Phrases[^1];
-            currentTurn.EndTime = FormatTime(
-                lastPhrase.OffsetMilliseconds + lastPhrase.DurationMilliseconds);
+            currentTurn.EndTime = FormatTime(raw.Segments[^1].EndSeconds);
             turns.Add(currentTurn);
         }
 
@@ -83,9 +62,9 @@ public class TranscriptFormatter
         {
             Metadata = new TranscriptMetadata
             {
-                DurationSeconds = fastResult.DurationMilliseconds / 1000.0,
+                DurationSeconds = raw.DurationSeconds,
                 RecordingDate = DateTime.Now.ToString("yyyy-MM-dd"),
-                SpeakerCount = speakerCount,
+                SpeakerCount = speakerIds.Count,
                 Speakers = speakers,
             },
             Summary = new TranscriptSummary
@@ -102,13 +81,19 @@ public class TranscriptFormatter
             },
             Turns = turns
         };
+
+        TranscriptTurn NewTurn(RawSegment segment) => new()
+        {
+            Speaker = IdOf(segment),
+            SpeakerName = NameOf(segment),
+            StartTime = FormatTime(segment.StartSeconds),
+            Text = segment.Text
+        };
     }
 
-    private static string FormatTime(long milliseconds)
+    private static string FormatTime(double seconds)
     {
-        var totalSeconds = milliseconds / 1000;
-        var minutes = totalSeconds / 60;
-        var seconds = totalSeconds % 60;
-        return $"{minutes:D2}:{seconds:D2}";
+        var totalSeconds = (long)seconds;
+        return $"{totalSeconds / 60:D2}:{totalSeconds % 60:D2}";
     }
 }

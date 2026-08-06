@@ -5,13 +5,21 @@ namespace Scribe.Tests;
 
 public class TranscriptFormatterTests
 {
-    private static Phrase Phrase(int speaker, long offsetMs, long durationMs, string text) => new()
+    // Kept in milliseconds so the pause-threshold cases below read the same as when
+    // they were written against Azure's integer-millisecond wire format.
+    private static RawSegment Phrase(int speaker, long offsetMs, long durationMs, string text) => new()
     {
-        Speaker = speaker,
-        OffsetMilliseconds = offsetMs,
-        DurationMilliseconds = durationMs,
-        Text = text,
-        Confidence = 1.0
+        Speaker = speaker.ToString(),
+        StartSeconds = offsetMs / 1000.0,
+        EndSeconds = (offsetMs + durationMs) / 1000.0,
+        Text = text
+    };
+
+    private static RawTranscript Raw(IEnumerable<RawSegment>? segments = null, double durationSeconds = 0) => new()
+    {
+        Provider = "test",
+        DurationSeconds = durationSeconds,
+        Segments = segments?.ToList() ?? new List<RawSegment>()
     };
 
     // ── Null / empty input ──────────────────────────────────────────────────
@@ -19,7 +27,7 @@ public class TranscriptFormatterTests
     [Fact]
     public void NullPhrases_ProducesNoTurnsAndZeroSpeakers()
     {
-        var result = TranscriptFormatter.FormatTranscript(new FastTranscriptionResult { Phrases = null });
+        var result = TranscriptFormatter.FormatTranscript(Raw());
 
         Assert.Empty(result.Turns);
         Assert.Equal(0, result.Metadata.SpeakerCount);
@@ -28,7 +36,7 @@ public class TranscriptFormatterTests
     [Fact]
     public void EmptyPhrases_ProducesNoTurns()
     {
-        var result = TranscriptFormatter.FormatTranscript(new FastTranscriptionResult { Phrases = [] });
+        var result = TranscriptFormatter.FormatTranscript(Raw());
 
         Assert.Empty(result.Turns);
     }
@@ -38,11 +46,7 @@ public class TranscriptFormatterTests
     [Fact]
     public void SinglePhrase_ProducesSingleTurn()
     {
-        var result = TranscriptFormatter.FormatTranscript(new FastTranscriptionResult
-        {
-            DurationMilliseconds = 5000,
-            Phrases = [Phrase(1, 0, 5000, "Hello world")]
-        });
+        var result = TranscriptFormatter.FormatTranscript(Raw([Phrase(1, 0, 5000, "Hello world")], durationSeconds: 5.0));
 
         Assert.Single(result.Turns);
         Assert.Equal("Hello world", result.Turns[0].Text);
@@ -51,10 +55,7 @@ public class TranscriptFormatterTests
     [Fact]
     public void SinglePhrase_EndTimeEqualsOffsetPlusDuration()
     {
-        var result = TranscriptFormatter.FormatTranscript(new FastTranscriptionResult
-        {
-            Phrases = [Phrase(1, 65000, 10000, "Hi")]
-        });
+        var result = TranscriptFormatter.FormatTranscript(Raw([Phrase(1, 65000, 10000, "Hi")]));
 
         // StartTime = 65s → 01:05, EndTime = 75s → 01:15
         Assert.Equal("01:05", result.Turns[0].StartTime);
@@ -72,7 +73,7 @@ public class TranscriptFormatterTests
             Phrase(1, 2999, 1000, "world") // pause = 2999 - (0+1000) = 1999ms ≤ 2000
         };
 
-        var result = TranscriptFormatter.FormatTranscript(new FastTranscriptionResult { Phrases = phrases });
+        var result = TranscriptFormatter.FormatTranscript(Raw(phrases));
 
         Assert.Single(result.Turns);
         Assert.Equal("Hello world", result.Turns[0].Text);
@@ -87,7 +88,7 @@ public class TranscriptFormatterTests
             Phrase(1, 3000, 1000, "world") // pause = 3000 - 1000 = 2000ms → boundary, ≤ 2000
         };
 
-        var result = TranscriptFormatter.FormatTranscript(new FastTranscriptionResult { Phrases = phrases });
+        var result = TranscriptFormatter.FormatTranscript(Raw(phrases));
 
         Assert.Single(result.Turns);
     }
@@ -101,7 +102,7 @@ public class TranscriptFormatterTests
             Phrase(1, 3001, 1000, "world") // pause = 3001 - 1000 = 2001ms > 2000
         };
 
-        var result = TranscriptFormatter.FormatTranscript(new FastTranscriptionResult { Phrases = phrases });
+        var result = TranscriptFormatter.FormatTranscript(Raw(phrases));
 
         Assert.Equal(2, result.Turns.Count);
         Assert.Equal("Hello", result.Turns[0].Text);
@@ -117,7 +118,7 @@ public class TranscriptFormatterTests
             Phrase(2, 600, 500, "I agree") // pause = 100ms, but different speaker
         };
 
-        var result = TranscriptFormatter.FormatTranscript(new FastTranscriptionResult { Phrases = phrases });
+        var result = TranscriptFormatter.FormatTranscript(Raw(phrases));
 
         Assert.Equal(2, result.Turns.Count);
         Assert.Equal(1, result.Turns[0].Speaker);
@@ -133,7 +134,7 @@ public class TranscriptFormatterTests
             Phrase(2, 5000, 3000, "Second") // ends at 8000ms = 00:08
         };
 
-        var result = TranscriptFormatter.FormatTranscript(new FastTranscriptionResult { Phrases = phrases });
+        var result = TranscriptFormatter.FormatTranscript(Raw(phrases));
 
         Assert.Equal("00:08", result.Turns[^1].EndTime);
     }
@@ -141,7 +142,7 @@ public class TranscriptFormatterTests
     // ── Speaker naming ──────────────────────────────────────────────────────
 
     [Fact]
-    public void SpeakerIds_MappedToNamesList()
+    public void SpeakerIds_MappedToNeutralLabelsInOrderOfFirstAppearance()
     {
         var phrases = new[]
         {
@@ -150,22 +151,22 @@ public class TranscriptFormatterTests
             Phrase(3, 10000, 1000, "C")
         };
 
-        var result = TranscriptFormatter.FormatTranscript(new FastTranscriptionResult { Phrases = phrases });
+        var result = TranscriptFormatter.FormatTranscript(Raw(phrases));
 
-        Assert.Equal("Alice",   result.Turns[0].SpeakerName);
-        Assert.Equal("Bob",     result.Turns[1].SpeakerName);
-        Assert.Equal("Charles", result.Turns[2].SpeakerName);
+        Assert.Equal("Speaker 1", result.Turns[0].SpeakerName);
+        Assert.Equal("Speaker 2", result.Turns[1].SpeakerName);
+        Assert.Equal("Speaker 3", result.Turns[2].SpeakerName);
     }
 
     [Fact]
-    public void SpeakerIdBeyondNamesList_FallsBackToGenericName()
+    public void ManySpeakers_KeepNumberingPastTen()
     {
-        // Generate 11 distinct speakers (names list only has 10)
+        // Eleven distinct speakers — the old hardcoded name list held ten.
         var phrases = Enumerable.Range(1, 11)
             .Select(i => Phrase(i, i * 5000L, 1000, $"Text {i}"))
             .ToArray();
 
-        var result = TranscriptFormatter.FormatTranscript(new FastTranscriptionResult { Phrases = phrases });
+        var result = TranscriptFormatter.FormatTranscript(Raw(phrases));
 
         Assert.Equal("Speaker 11", result.Turns[10].SpeakerName);
     }
@@ -180,7 +181,7 @@ public class TranscriptFormatterTests
             Phrase(1, 10000, 1000, "A again")
         };
 
-        var result = TranscriptFormatter.FormatTranscript(new FastTranscriptionResult { Phrases = phrases });
+        var result = TranscriptFormatter.FormatTranscript(Raw(phrases));
 
         Assert.Equal(2, result.Metadata.SpeakerCount);
     }
@@ -188,13 +189,9 @@ public class TranscriptFormatterTests
     // ── Metadata ────────────────────────────────────────────────────────────
 
     [Fact]
-    public void DurationInMetadata_MatchesDurationMilliseconds()
+    public void DurationInMetadata_MatchesRawDuration()
     {
-        var result = TranscriptFormatter.FormatTranscript(new FastTranscriptionResult
-        {
-            DurationMilliseconds = 90000,
-            Phrases = [Phrase(1, 0, 1000, "Hi")]
-        });
+        var result = TranscriptFormatter.FormatTranscript(Raw([Phrase(1, 0, 1000, "Hi")], durationSeconds: 90.0));
 
         Assert.Equal(90.0, result.Metadata.DurationSeconds);
     }
@@ -202,10 +199,7 @@ public class TranscriptFormatterTests
     [Fact]
     public void RecordingDate_IsToday()
     {
-        var result = TranscriptFormatter.FormatTranscript(new FastTranscriptionResult
-        {
-            Phrases = [Phrase(1, 0, 1000, "Hi")]
-        });
+        var result = TranscriptFormatter.FormatTranscript(Raw([Phrase(1, 0, 1000, "Hi")]));
 
         Assert.Equal(DateTime.Now.ToString("yyyy-MM-dd"), result.Metadata.RecordingDate);
     }
@@ -220,10 +214,7 @@ public class TranscriptFormatterTests
     [InlineData(3661000, "61:01")] // > 1 hour, no hours segment
     public void TimeFormatting_CorrectOutput(long offsetMs, string expected)
     {
-        var result = TranscriptFormatter.FormatTranscript(new FastTranscriptionResult
-        {
-            Phrases = [Phrase(1, offsetMs, 1000, "Hi")]
-        });
+        var result = TranscriptFormatter.FormatTranscript(Raw([Phrase(1, offsetMs, 1000, "Hi")]));
 
         Assert.Equal(expected, result.Turns[0].StartTime);
     }

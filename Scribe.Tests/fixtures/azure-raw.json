@@ -1,0 +1,96 @@
+{
+  "durationMilliseconds": 60000,
+  "combinedPhrases": [
+    { "channel": 0, "text": "Thanks everyone for making time..." }
+  ],
+  "phrases": [
+    {
+      "offsetMilliseconds": 309,
+      "durationMilliseconds": 4411,
+      "speaker": 4,
+      "locale": "en-US",
+      "confidence": 0.94,
+      "text": "Thanks everyone for making time. I want to walk through the activation flow today."
+    },
+    {
+      "offsetMilliseconds": 5110,
+      "durationMilliseconds": 910,
+      "speaker": 1,
+      "locale": "en-US",
+      "confidence": 0.9,
+      "text": "Sounds good."
+    },
+    {
+      "offsetMilliseconds": 6400,
+      "durationMilliseconds": 6450,
+      "speaker": 1,
+      "locale": "en-US",
+      "confidence": 0.92,
+      "text": "So when I got the card, the first thing I did was look for a button that said activate."
+    },
+    {
+      "offsetMilliseconds": 13200,
+      "durationMilliseconds": 4400,
+      "speaker": 1,
+      "locale": "en-US",
+      "confidence": 0.93,
+      "text": "And it wasn't there, so I assumed it was already active."
+    },
+    {
+      "offsetMilliseconds": 21900,
+      "durationMilliseconds": 5540,
+      "speaker": 2,
+      "locale": "en-US",
+      "confidence": 0.91,
+      "text": "I had the same problem, but I ended up calling the number on the sticker instead."
+    },
+    {
+      "offsetMilliseconds": 28000,
+      "durationMilliseconds": 5500,
+      "speaker": 6,
+      "locale": "en-US",
+      "confidence": 0.89,
+      "text": "That's the part I'd push on. We shipped the sticker as a fallback, not the primary path."
+    },
+    {
+      "offsetMilliseconds": 34100,
+      "durationMilliseconds": 800,
+      "speaker": null,
+      "locale": "en-US",
+      "confidence": 0.55,
+      "text": "Mm-hmm."
+    },
+    {
+      "offsetMilliseconds": 35200,
+      "durationMilliseconds": 6600,
+      "speaker": 5,
+      "locale": "en-US",
+      "confidence": 0.9,
+      "text": "From the build side, the API supports activation in-app, it just isn't surfaced anywhere in the current screens."
+    },
+    {
+      "offsetMilliseconds": 42300,
+      "durationMilliseconds": 6600,
+      "speaker": 6,
+      "locale": "en-US",
+      "confidence": 0.92,
+      "text": "Right, and that was a deliberate call when we cut scope, but I don't think we ever revisited it."
+    },
+    {
+      "offsetMilliseconds": 49500,
+      "durationMilliseconds": 5700,
+      "speaker": 3,
+      "locale": "en-US",
+      "confidence": 0.9,
+      "text": "I can put together a design for the in-app path this week if that's useful."
+    },
+    {
+      "offsetMilliseconds": 55800,
+      "durationMilliseconds": 4200,
+      "speaker": 4,
+      "locale": "en-US",
+      "confidence": 0.93,
+      "text": "Please do. Let's look at it in next week's review."
+    }
+  ]
+}

@@ -199,15 +199,22 @@ class Program
     private static async Task<Transcript?> LoadAndFormatRawAsync(string rawJsonPath, string transcriptPath)
     {
         var rawJson = await File.ReadAllTextAsync(rawJsonPath);
-        var fastResult = JsonSerializer.Deserialize<FastTranscriptionResult>(rawJson, Json.CaseInsensitive);
 
-        if (fastResult == null)
+        RawTranscript raw;
+        try
         {
-            ConsoleHelper.WriteError("Failed to parse raw transcription JSON");
+            raw = RawTranscriptReader.Read(rawJson);
+        }
+        catch (Exception ex) when (ex is InvalidDataException or JsonException)
+        {
+            ConsoleHelper.WriteError(ex.Message);
             return null;
         }
 
-        var transcript = TranscriptFormatter.FormatTranscript(fastResult);
+        Log.Information("Read {Count} segments from {Provider} transcription",
+            raw.Segments.Count, raw.Provider);
+
+        var transcript = TranscriptFormatter.FormatTranscript(raw);
         await File.WriteAllTextAsync(transcriptPath, JsonSerializer.Serialize(transcript, Json.Indented));
         Log.Information("Formatted transcript saved to: {TranscriptPath}", transcriptPath);
         return transcript;
