@@ -6,15 +6,6 @@ public class AppSettingsTests
 {
     private static AppSettings ValidSettings() => new()
     {
-        Transcription = new TranscriptionSettings
-        {
-            AzureSpeech = new AzureSpeechSettings
-            {
-                Endpoint = "https://example.cognitiveservices.azure.com",
-                ApiKey = "test-key",
-                Region = "eastus"
-            }
-        },
         Completion = new CompletionSettings
         {
             AzureOpenAI = new AzureOpenAISettings
@@ -35,28 +26,6 @@ public class AppSettingsTests
 
         Assert.True(result);
         Assert.Empty(errors);
-    }
-
-    [Fact]
-    public void MissingSpeechEndpoint_ReturnsError()
-    {
-        var settings = ValidSettings();
-        settings.Transcription.AzureSpeech.Endpoint = "";
-
-        settings.IsValid(out var errors);
-
-        Assert.Contains(errors, e => e.Contains("Transcription.AzureSpeech.Endpoint"));
-    }
-
-    [Fact]
-    public void MissingSpeechApiKey_ReturnsError()
-    {
-        var settings = ValidSettings();
-        settings.Transcription.AzureSpeech.ApiKey = "";
-
-        settings.IsValid(out var errors);
-
-        Assert.Contains(errors, e => e.Contains("Transcription.AzureSpeech.ApiKey"));
     }
 
     [Fact]
@@ -99,17 +68,17 @@ public class AppSettingsTests
 
         settings.IsValid(out var errors);
 
-        Assert.True(errors.Count >= 5);
+        Assert.True(errors.Count >= 3);
     }
 
     [Fact]
     public void WhitespaceOnlyValues_TreatedAsMissing()
     {
         var settings = ValidSettings();
-        settings.Transcription.AzureSpeech.ApiKey = "   ";
+        settings.Completion.AzureOpenAI.ApiKey = "   ";
 
         settings.IsValid(out var errors);
 
-        Assert.Contains(errors, e => e.Contains("Transcription.AzureSpeech.ApiKey"));
+        Assert.Contains(errors, e => e.Contains("Completion.AzureOpenAI.ApiKey"));
     }
 }

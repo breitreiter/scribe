@@ -1,3 +1,4 @@
+using Scribe.Models;
 using Scribe.Services;
 
 namespace Scribe.Tests;

@@ -1,15 +1,22 @@
 ---
 kind: plan
 title: HTML Report Design
-state: shipped
+state: shelved
 created: 2025-11-30
-updated: 2026-05-15
+updated: 2026-08-05
+superseded_by: llm-native-output.md
 provenance:
   source: project-migrate-skill:M-2026-05-15-1652
   migrated_at: 2026-05-15
 ---
 
 # HTML Report Design
+
+> **Shelved 2026-08-05.** The HTML report is being removed: scribe's consumer is
+> now a model doing retrieval, not a person reading a page once. Superseded by
+> `llm-native-output.md`, which replaces `transcript.html` with `meeting.md`.
+> Kept for the interaction-design reasoning, which may be worth something if a
+> viewer is ever wanted again.
 
 **Outcome:** Core layout shipped in HtmlReportGenerator.cs + Templates/transcript-template.html. Two items remain unimplemented: (1) media controls — placeholder exists in header, disabled; (2) multi-timestamp "also discussed at" links in summary items.
 

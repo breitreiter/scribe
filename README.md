@@ -1,105 +1,77 @@
 # Scribe
 
-A CLI tool for generating transcripts and summaries from meeting audio recordings.
+A CLI tool that turns a raw meeting transcription into an enriched, retrieval-ready meeting record.
 
 ## Overview
 
-Scribe processes audio files from meetings and generates:
-- Clean, formatted transcripts with speaker identification and timestamps
-- AI-generated summaries with grounded key points and action items
-- Interactive HTML reports with clickable links from summary to transcript
+**Scribe does not transcribe audio.** You produce the raw transcription yourself
+with WhisperX (see [docs/generating-transcripts.md](docs/generating-transcripts.md)),
+and Scribe enriches it:
 
-## Quick Start
+- Merges diarized fragments into clean speaker turns with timestamps
+- Generates an AI summary with key points and action items, grounded in specific turns
+- Emits a structured meeting record built to be read by a model doing retrieval
 
-**Try the sample output first:** Open `samples/generative-ui-meeting/transcript.html` in your browser to see what Scribe produces, then read the [sample README](samples/generative-ui-meeting/README.md) for details.
+Keeping transcription out of the tool is deliberate. It means the audio never has
+to leave the machine it was recorded on, ASR can run wherever the GPU is, and
+Scribe has no opinion about which ASR you used — it reads the JSON.
 
 ## Prerequisites
 
 - .NET 8.0 or later
-- Azure account with access to:
-  - **Azure AI Speech** (Fast Transcription with speaker diarization)
-  - **Azure OpenAI** (o4-mini for AI summaries)
+- A raw transcription produced by WhisperX (or a legacy Azure Speech Fast Transcription response)
+- Azure OpenAI access, for the summary pass
 
 ## Setup
 
-1. **Clone the repository** (or navigate to the project directory)
-
-2. **Install dependencies**
+1. **Install dependencies**
    ```bash
    dotnet restore
    ```
 
-3. **Configure settings**
-
-   Copy the example configuration file:
+2. **Configure settings**
    ```bash
    cp appsettings.example.json appsettings.json
    ```
+   Edit `appsettings.json` and add your **Completion.AzureOpenAI** credentials
+   (Endpoint, API Key, DeploymentName).
 
-   Edit `appsettings.json` and add your Azure credentials:
-   - **Transcription.AzureSpeech**: Endpoint, API Key, Region, Locale
-   - **Completion.AzureOpenAI**: Endpoint, API Key, DeploymentName (o4-mini)
-
-4. **Build the project**
+3. **Build**
    ```bash
    dotnet build
    ```
 
 ## Usage
 
-### Transcribe a new audio file:
+First, produce a transcription — see [docs/generating-transcripts.md](docs/generating-transcripts.md).
+Put its JSON in a directory for the meeting, then:
+
 ```bash
-dotnet run -- <path-to-audio-file>
+dotnet run -- <path-to-meeting-directory>
 ```
 
-### Reprocess an existing transcription:
-```bash
-dotnet run -- <path-to-output-directory>
-```
-This regenerates the HTML and summary without re-running the expensive transcription API call.
+Scribe looks for `raw-transcription.json` in that directory (falling back to
+`fast-transcription-raw.json` for meetings transcribed before the pivot). If you
+don't provide a path, Scribe prompts for one.
 
-If you don't provide a path, Scribe will prompt you for one.
-
-### Supported Audio Formats
-
-Scribe supports the following audio formats (via Azure Speech Fast Transcription):
-- FLAC, M4A, MP3, MP4, MPEG, MPGA, OGA, OGG, WAV, WebM, WMA, AAC, AMR, SPEEX
-
-**Constraints:**
-- Max file size: 300 MB
-- Max duration: 2 hours
-
-## Configuration
-
-Configuration is managed through `appsettings.json`. The file contains:
-
-- **Logging**: Log level configuration (defaults to Warning)
-- **Transcription**: Settings for Azure AI Speech (Fast Transcription)
-- **Completion**: Settings for Azure OpenAI (o4-mini)
-
-See `appsettings.example.json` for the full structure.
+Re-running is cheap and idempotent: an existing summary is reused rather than
+regenerated, so you can iterate on the output format without paying for the AI pass.
 
 ## Output
 
-Scribe creates a directory for each meeting transcript, containing:
-- **`transcript.html`** - Interactive HTML report with summary and transcript
-- **`transcript.json`** - Structured data (metadata, summary, turns)
-- **`fast-transcription-raw.json`** - Raw Azure Speech API response
-- `scribe.log` - Log file (only if warnings/errors occurred)
+Scribe writes into the meeting directory:
+
+- **`transcript.json`** — structured data (metadata, summary, turns)
+- `scribe.log` — log file (only if warnings/errors occurred)
 
 ## Features
 
-- ✅ Audio file transcription with speaker diarization
+- ✅ Speaker turn formatting from diarized ASR output
 - ✅ AI-generated summaries with grounded key points and action items
-- ✅ Interactive HTML reports with clickable transcript links
-- ✅ Reprocessing mode for fast iteration on layout/summary
+- ✅ Idempotent re-runs for fast iteration on output format
+- ⏳ Meeting markdown record (`<date>-<slug>.md`) built for RAG — see `plans/llm-native-output.md`
 - ⏳ Interactive speaker name assignment
-- ⏳ AI-generated topic labels
-- ⏳ Configurable output directory
-
-## CLI Options
-
-_CLI options will be documented here as they are implemented._
+- ⏳ AI-generated topic segmentation
 
 ## Development
 

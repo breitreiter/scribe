@@ -4,7 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Scribe is a CLI tool for generating transcripts and summaries from meeting audio recordings. It uses Azure AI Speech (Fast Transcription) for transcription with speaker diarization, and Azure OpenAI (GPT-4o-mini) for generating summaries and processing transcripts.
+Scribe is a CLI tool that **enriches an existing meeting transcription**. It does
+not transcribe audio and has no ASR dependency: the user runs WhisperX themselves
+(see `docs/generating-transcripts.md`) and hands Scribe the resulting JSON. Scribe
+merges diarized fragments into speaker turns and generates a grounded AI summary
+via Azure OpenAI.
+
+Transcription was removed 2026-08-06 (pre-removal commit `3212a80`). Audio stays on
+the machine that recorded it, ASR runs wherever the GPU is, and Scribe stays
+provider-agnostic by reading JSON rather than calling an API. If you find yourself
+adding an ASR client here, that is the old purpose reasserting itself — don't.
 
 **Tech Stack:**
 - C# / .NET 8.0
@@ -23,17 +32,21 @@ dotnet restore
 # Build the project
 dotnet build
 
-# Run with audio file
-dotnet run -- <path-to-audio-file>
+# Enrich a meeting directory containing a raw transcription
+dotnet run -- <path-to-meeting-directory>
 
-# Run with existing directory (reprocessing mode)
-dotnet run -- <path-to-directory>
+# Run tests
+DOTNET_ROLL_FORWARD=LatestMajor dotnet test
 ```
+
+The roll-forward variable is needed on machines that only have the .NET 10
+runtime installed; the project targets net8.0 and the test host will otherwise
+refuse to start.
 
 ### Run without arguments (interactive mode)
 ```bash
 dotnet run
-# Will prompt for audio file path
+# Will prompt for the meeting directory path
 ```
 
 ## Configuration
@@ -43,7 +56,6 @@ The project uses `appsettings.json` for configuration (gitignored). A template i
 - Copy to `appsettings.json` and add Azure credentials
 
 Required settings:
-- **Transcription.AzureSpeech**: Endpoint, ApiKey, Region, Locale
 - **Completion.AzureOpenAI**: Endpoint, ApiKey, DeploymentName, ModelName
 
 Logging level is configurable via `Logging:LogLevel:Default` (defaults to Warning).
@@ -52,53 +64,32 @@ Logging level is configurable via `Logging:LogLevel:Default` (defaults to Warnin
 
 ### Core Workflow
 
-1. **Input handling** (Program.cs:51-80):
-   - Accepts audio file path OR directory path
-   - **File mode**: Normal transcription workflow
-   - **Directory mode**: Reprocessing mode (skips transcription, reuses `fast-transcription-raw.json`)
+1. **Input handling** (Program.cs): takes a meeting directory. Locates the raw
+   transcription by trying `raw-transcription.json`, then `fast-transcription-raw.json`
+   (legacy Azure name, kept so pre-pivot meeting directories still open).
 
-2. **Transcription** (TranscriptionService.cs):
-   - Validates audio file (format, size < 300MB, duration < 2 hours)
-   - Calls AzureSpeechFastService with speaker diarization settings
-   - Saves raw JSON response to `fast-transcription-raw.json`
-   - Formats transcript using TranscriptFormatter
-   - Generates HTML report via HtmlReportGenerator
-   - Generates AI summary via SummaryService (optional)
+2. **Formatting** (TranscriptFormatter): raw JSON -> structured `Transcript` with
+   merged speaker turns.
 
-3. **Output** (per-run directory):
-   - `fast-transcription-raw.json` - Raw Azure Speech API response
-   - `transcript.json` - Formatted transcript with metadata, turns, topics, summary
-   - `transcript.html` - HTML report for viewing
-   - `scribe.log` - Log file (auto-deleted if empty)
-   - Copy of original audio file (in normal mode)
+3. **Summary** (SummaryService): Azure OpenAI pass producing oneLiner, overview,
+   grounded keyPoints and actionItems. Skipped if `transcript.json` already has
+   one, which makes re-runs free.
+
+4. **Output** (written into the meeting directory):
+   - `transcript.json` - formatted transcript with metadata, turns, topics, summary
+   - `scribe.log` - log file (auto-deleted if empty)
 
 ### Key Services
 
-**TranscriptionService** (Services/TranscriptionService.cs):
-- Orchestrates the transcription workflow
-- Validates input files and formats
-- Calls AzureSpeechFastService for transcription
-- Formats results and generates outputs
-
-**AzureSpeechFastService** (Services/AzureSpeechFastService.cs):
-- Calls Azure AI Speech Fast Transcription API
-- Handles speaker diarization parameters (minSpeakers, maxSpeakers)
-- Returns FastTranscriptionResult (raw API response)
-
 **TranscriptFormatter** (Services/TranscriptFormatter.cs):
-- Converts raw API response to structured Transcript model
-- Concatenates fragmented lines from same speaker
-- Generates speaker names (e.g., "Speaker 1", "Speaker 2")
+- Converts raw transcription JSON to the structured Transcript model
+- Concatenates fragmented lines from the same speaker (splits on >2s pauses)
 - Creates TranscriptTurn objects with formatted timestamps
 
 **SummaryService** (Services/SummaryService.cs):
 - Generates AI summaries using Azure OpenAI
 - Creates oneLiner, overview, keyPoints, and actionItems
 - Uses structured JSON output with grounding to transcript turns
-
-**HtmlReportGenerator** (Services/HtmlReportGenerator.cs):
-- Generates interactive HTML reports from Transcript model
-- Uses template from Templates/transcript-template.html
 
 ### Data Models
 
@@ -109,14 +100,12 @@ Logging level is configurable via `Logging:LogLevel:Default` (defaults to Warnin
 - Summary includes grounded keyPoints and actionItems with turn indices
 - Turns represent individual speaker utterances with timestamps
 
-**TranscriptionResult** (Models/TranscriptionResult.cs):
-- Internal representation during processing
-- Contains segments with speaker IDs, timestamps, text, confidence
-- Tracks raw JSON path, transcript path, HTML path
+**FastTranscriptionResult et al.** (Models/AzureFastTranscriptionJson.cs):
+- Read-only DTOs for the Azure Speech Fast Transcription wire format
+- Scribe never calls that API; these only parse JSON someone else produced
 
 **Configuration Models** (Models/Configuration/):
-- AppSettings, TranscriptionSettings, CompletionSettings
-- AzureSpeechSettings, AzureOpenAISettings
+- AppSettings, CompletionSettings, AzureOpenAISettings
 - Includes validation in AppSettings.IsValid()
 
 ### Logging
@@ -129,54 +118,30 @@ Serilog is configured to:
 
 ## Design Decisions
 
-### Input Flexibility (DESIGN.md)
+### Enrichment only
 
-The tool accepts two types of input:
-1. **Audio file path**: Normal workflow with collision handling (creates meeting-name, meeting-name-2, etc.)
-2. **Directory path**: Reprocessing mode - skips transcription, reuses existing `fast-transcription-raw.json`
-
-This allows rapid iteration during development without re-running expensive transcription operations.
-
-### Directory Collision Handling
-
-When creating output directories based on meeting title:
-- Sanitize title for filesystem (max 100 chars)
-- Resolve collisions by appending numerical index (-2, -3, etc.)
-- See REQUIREMENTS.md:53 for specification
+The tool takes one input: a meeting directory holding a raw transcription. What was
+once "reprocessing mode" is now the only mode. Runs are idempotent — an existing
+summary is reused — so iterating on output format costs nothing.
 
 ## TODO / Not Yet Implemented
 
-From REQUIREMENTS.md, these features are planned but not yet implemented:
-- Interactive meeting title and purpose prompts (line 13-14)
-- Interactive speaker name assignment workflow (line 19-27)
-- AI-generated topic labels for conversation sections (line 32)
-- AI-generated preamble at top of transcript (line 33)
+Tracked in `plans/`, not here:
+- Meeting markdown record built for retrieval (`plans/llm-native-output.md`)
+- Interactive speaker name assignment (`plans/speaker-identification.md`)
+- Interactive meeting date, title and purpose prompts
+- AI-generated topic segmentation
 - Configurable output directory location
-
-Current workflow asks for:
-- Number of speakers (for diarization)
-
-See Program.cs:271-274 for TODO markers.
-
-## Supported Audio Formats
-
-Via Azure Speech Fast Transcription:
-- FLAC, M4A, MP3, MP4, MPEG, MPGA, OGA, OGG, WAV, WebM, WMA, AAC, AMR, SPEEX
-
-File constraints:
-- Max size: 300 MB
-- Max duration: 2 hours
-- See TranscriptionService.cs:62-75 for validation logic
 
 ## Future Considerations
 
-From REQUIREMENTS.md and DESIGN.md:
-- HTML reports with interactive media controls (see REPORT_DESIGN.md for mockup)
-- Using Microsoft.Extensions.AI for multi-provider support
-- AI-powered paragraph breaking for long lines
-- Video file support (extracting/downsampling audio)
-- `--force-transcribe` flag to override reprocessing skip logic
 - `--verbose` flag for debug-level console logging
+- Multi-provider completion via Microsoft.Extensions.AI (a local OpenAI-compatible
+  endpoint is the intended default; see `plans/llm-native-output.md`)
+
+Explicitly **not** planned: any form of audio ingestion, ASR client, or HTML
+output. Both were removed in the 2026-08-06 pivot. Transcription lives in
+`docs/generating-transcripts.md` as a documented human step.
 
 ## Project substrate (managed by `imp init`)
 
