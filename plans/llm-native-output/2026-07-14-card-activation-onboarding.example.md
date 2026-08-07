@@ -141,8 +141,9 @@ keeping the sticker regardless. Design ownership was raised and left open.
 ## Transcript
 
 *(Card activation onboarding session 3 debrief, 2026-07-14, 6 participants.
-Complete and verbatim. Short acknowledgements are folded into the turn they
-interrupt; the folded turn's ID is shown inline, so every ID is accounted for.)*
+Complete and verbatim. Short acknowledgements are folded onto the end of the turn
+they interrupt, keeping their own ID and speaker, so every ID is accounted for as
+either a turn or a fold.)*
 
 ### 0:00:00–0:04:12 — What the customers did with the envelope
 
@@ -152,7 +153,7 @@ interrupt; the folded turn's ID is shown inline, so every ID is accounted for.)*
 
 [T001 0:00:34] Priya Raman (customer): I opened it at the kitchen table. There was the card, and a folded leaflet thing. I read the leaflet first because it looked like it was telling me what to do.
 
-[T002 0:01:12] Priya Raman: And it doesn't say activate anywhere on it. [T003 folded: Dana Okafor: Mm-hmm.] So my assumption was that it's ready to use — it came from the bank, it's got my name on it, why would there be another step.
+[T002 0:01:12] Priya Raman: And it doesn't say activate anywhere on it. So my assumption was that it's ready to use — it came from the bank, it's got my name on it, why would there be another step. [T003 folded: Dana Okafor: Mm-hmm.]
 
 [T004 0:01:58] Tom Alderidge (customer): Mine was the same, except I was looking for a sticker. That's the bit I remember from the last one I got.
 
@@ -186,7 +187,7 @@ interrupt; the folded turn's ID is shown inline, so every ID is accounted for.)*
 
 [T016 0:09:58] Ines Barros: Buildable. It's interface work, not backend work. I'll confirm the fields this week.
 
-[T017 0:10:40] Marcus Webb: Then I'll scope it for this quarter. [T018 folded: Ines Barros: Okay.] What we shipped isn't what we designed, and it's been a year of nobody going back to it.
+[T017 0:10:40] Marcus Webb: Then I'll scope it for this quarter. What we shipped isn't what we designed, and it's been a year of nobody going back to it. [T018 folded: Ines Barros: Okay.]
 
 [T019 0:11:35] Dana Okafor: Who's drawing that screen, though? There's no designer in this room and there wasn't one in the last two sessions either.
 
@@ -204,6 +205,7 @@ interrupt; the folded turn's ID is shown inline, so every ID is accounted for.)*
 | Complete transcript or a selection? | **Complete, always.** ID gaps mean folding and nothing else. A selection would make gaps ambiguous and could leave a cited turn absent from the file. |
 | How much roster per section stamp? | **Compressed stamp; role inline at first mention within each section.** The role travels with the claim, so it survives in the chunk that carries the claim, and cost scales with people mentioned rather than people present. |
 | Two or more still-unnamed labels? | **Kept distinct by display ID** ("Unidentified speaker 6"). Collapsing them to one string would merge distinct voices into an apparent single person — a fabricated coherence, the same error as inventing a name. |
+| Where does a fold marker sit? | **At the end of the turn it attaches to.** Mid-utterance placement reads better but cannot be reconstructed: once segments merge into a turn, the position the interjection landed at is gone. Rendering it mid-text would be inventing a detail. |
 | Do decisions need stable IDs? | **Derived from evidence**: `D-T017` is the decision first cited at turn T017. Ordinal `D1`/`D2` go stale silently across re-summarization, which now happens on every speaker rename. Collisions take a suffix. |
 
 Two further commitments from the earlier draft, unchanged:

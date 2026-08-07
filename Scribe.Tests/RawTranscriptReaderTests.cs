@@ -134,10 +134,14 @@ public class RawTranscriptReaderTests
     public void UndiarizedSegment_IsNotAttributedToAnyone()
     {
         var transcript = TranscriptFormatter.FormatTranscript(WhisperX());
-        var turn = transcript.Turns.Single(t => t.Text == "Mm-hmm.");
 
-        Assert.Equal(0, turn.Speaker);
-        Assert.Equal("Unidentified speaker", turn.SpeakerName);
+        // "Mm-hmm." is an acknowledgement, so it folds — but it still must not be
+        // attributed to whoever happened to speak around it.
+        var fold = transcript.Turns
+            .SelectMany(t => t.FoldedBackchannels)
+            .Single(f => f.Text == "Mm-hmm.");
+
+        Assert.Equal("Unidentified speaker", fold.SpeakerName);
         Assert.DoesNotContain(0, transcript.Metadata.Speakers.Keys);
     }
 }

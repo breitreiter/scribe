@@ -70,6 +70,8 @@ public class TranscriptFormatter
         for (int i = 0; i < turns.Count; i++)
             turns[i].Id = TurnId(i);
 
+        turns = FoldBackchannels(turns);
+
         return new Transcript
         {
             Metadata = new TranscriptMetadata
@@ -96,6 +98,61 @@ public class TranscriptFormatter
     }
 
     public static string TurnId(int index) => $"T{index:D3}";
+
+    /// <summary>
+    /// Content-free acknowledgements. Bare "yes"/"no" are deliberately absent: they are
+    /// frequently the substantive answer to a question, and a turn line carries more
+    /// weight than a fold marker.
+    /// </summary>
+    private static readonly HashSet<string> Backchannels = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "yeah", "yep", "yup", "right", "okay", "ok", "mm-hmm", "mhm", "mmhmm", "uh-huh",
+        "sure", "exactly", "got it", "i see", "true", "agreed", "of course", "makes sense",
+        "gotcha", "fair enough", "hmm", "mm", "wow", "same", "totally", "absolutely",
+        "yeah yeah", "right right", "okay okay", "oh okay", "oh right", "mm-hmm mm-hmm"
+    };
+
+    /// <summary>
+    /// Moves content-free interjections out of the turn list and onto the turn they
+    /// interrupt. Lossless: the text, speaker and original ID are all preserved on the
+    /// fold, so a wrongly-classified interjection is a rendering wobble rather than
+    /// deleted content — and every ID stays accounted for, as either a turn or a fold.
+    /// Neighbouring turns are NOT merged: merging would consume the continuation's ID,
+    /// and an ID that is neither a turn nor a fold is exactly the ambiguity IDs exist
+    /// to prevent.
+    /// </summary>
+    private static List<TranscriptTurn> FoldBackchannels(List<TranscriptTurn> turns)
+    {
+        var folded = new List<TranscriptTurn>(turns.Count);
+
+        foreach (var turn in turns)
+        {
+            // Nothing to attach to yet: the first turn stands even if it is "Okay."
+            if (folded.Count > 0 && IsBackchannel(turn.Text) && folded[^1].Speaker != turn.Speaker)
+            {
+                folded[^1].FoldedBackchannels.Add(new FoldedBackchannel
+                {
+                    Id = turn.Id,
+                    SpeakerName = turn.SpeakerName,
+                    Text = turn.Text
+                });
+                continue;
+            }
+
+            folded.Add(turn);
+        }
+
+        return folded;
+    }
+
+    private static bool IsBackchannel(string text)
+    {
+        var normalized = new string(text.Where(c => !char.IsPunctuation(c) || c == '-').ToArray())
+            .Trim()
+            .ToLowerInvariant();
+
+        return normalized.Length > 0 && Backchannels.Contains(normalized);
+    }
 
     /// <summary>
     /// H:MM:SS. Timestamps are scrub targets for the source recording, so an hour

@@ -211,6 +211,130 @@ public class TranscriptFormatterTests
                      result.Turns.Select(t => t.Id));
     }
 
+    // ── Backchannel folding ─────────────────────────────────────────────────
+
+    [Fact]
+    public void Acknowledgement_IsFoldedIntoTheTurnItInterrupts()
+    {
+        var phrases = new[]
+        {
+            Phrase(1, 0,     3000, "So the thing I keep coming back to is activation"),
+            Phrase(2, 3500,  500,  "Mm-hmm."),
+            Phrase(1, 4500,  3000, "and nobody could find the button")
+        };
+
+        var result = TranscriptFormatter.FormatTranscript(Raw(phrases));
+
+        Assert.Equal(2, result.Turns.Count);
+        Assert.Single(result.Turns[0].FoldedBackchannels);
+        Assert.Equal("Mm-hmm.", result.Turns[0].FoldedBackchannels[0].Text);
+    }
+
+    [Fact]
+    public void FoldedBackchannel_KeepsItsOwnIdAndSpeaker()
+    {
+        // Lossless: a fold must stay reversible and attributable.
+        var phrases = new[]
+        {
+            Phrase(1, 0,    3000, "First"),
+            Phrase(2, 3500, 500,  "Right."),
+            Phrase(1, 4500, 3000, "Second")
+        };
+
+        var result = TranscriptFormatter.FormatTranscript(Raw(phrases));
+        var fold = result.Turns[0].FoldedBackchannels[0];
+
+        Assert.Equal("T001", fold.Id);
+        Assert.Equal("Speaker 2", fold.SpeakerName);
+    }
+
+    [Fact]
+    public void EveryIdIsAccountedFor_AsATurnOrAFold()
+    {
+        // The invariant that makes an ID gap unambiguous.
+        var phrases = new[]
+        {
+            Phrase(1, 0,    3000, "First"),
+            Phrase(2, 3500, 500,  "Yeah."),
+            Phrase(1, 4500, 3000, "Second"),
+            Phrase(3, 8000, 500,  "Exactly."),
+            Phrase(1, 9000, 2000, "Third")
+        };
+
+        var result = TranscriptFormatter.FormatTranscript(Raw(phrases));
+
+        var seen = result.Turns.Select(t => t.Id)
+            .Concat(result.Turns.SelectMany(t => t.FoldedBackchannels).Select(f => f.Id))
+            .OrderBy(id => id, StringComparer.Ordinal);
+
+        Assert.Equal(["T000", "T001", "T002", "T003", "T004"], seen);
+    }
+
+    [Fact]
+    public void SameSpeakerSayingOkay_IsNotFolded()
+    {
+        // Folding is about interruption. A speaker's own "Okay." continuing their
+        // own thought is not a backchannel.
+        var phrases = new[]
+        {
+            Phrase(1, 0,    3000, "So here is the plan"),
+            Phrase(1, 6000, 500,  "Okay.")
+        };
+
+        var result = TranscriptFormatter.FormatTranscript(Raw(phrases));
+
+        Assert.Equal(2, result.Turns.Count);
+        Assert.Empty(result.Turns[0].FoldedBackchannels);
+    }
+
+    [Fact]
+    public void BareYesAndNo_AreNeverFolded()
+    {
+        // They are usually the answer to a question, and an answer deserves a turn.
+        var phrases = new[]
+        {
+            Phrase(1, 0,    3000, "Did you find the activation screen?"),
+            Phrase(2, 3500, 500,  "No."),
+            Phrase(1, 4500, 3000, "Right, that is what we expected")
+        };
+
+        var result = TranscriptFormatter.FormatTranscript(Raw(phrases));
+
+        Assert.Equal(3, result.Turns.Count);
+        Assert.Equal("No.", result.Turns[1].Text);
+    }
+
+    [Fact]
+    public void SubstantiveShortTurn_IsNotFolded()
+    {
+        var phrases = new[]
+        {
+            Phrase(1, 0,    3000, "Who owns the design?"),
+            Phrase(2, 3500, 500,  "Nobody yet."),
+            Phrase(1, 4500, 3000, "That is a problem")
+        };
+
+        var result = TranscriptFormatter.FormatTranscript(Raw(phrases));
+
+        Assert.Equal(3, result.Turns.Count);
+    }
+
+    [Fact]
+    public void LeadingBackchannel_StaysATurn()
+    {
+        // Nothing precedes it to fold into.
+        var phrases = new[]
+        {
+            Phrase(1, 0,    500,  "Okay."),
+            Phrase(2, 1000, 3000, "So let us begin")
+        };
+
+        var result = TranscriptFormatter.FormatTranscript(Raw(phrases));
+
+        Assert.Equal(2, result.Turns.Count);
+        Assert.Equal("T000", result.Turns[0].Id);
+    }
+
     // ── Metadata ────────────────────────────────────────────────────────────
 
     [Fact]
