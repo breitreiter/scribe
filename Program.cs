@@ -175,6 +175,10 @@ class Program
                     transcript.Summary.KeyPoints.Count);
             }
 
+            var meetingFilePath = Path.Combine(outputDirectory, MeetingMarkdownWriter.FileName(transcript));
+            await File.WriteAllTextAsync(meetingFilePath, MeetingMarkdownWriter.Write(transcript));
+            Log.Information("Meeting file written to: {Path}", meetingFilePath);
+
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine("[green]✓[/] Enrichment complete!");
 
@@ -184,7 +188,7 @@ class Program
             AnsiConsole.MarkupLine($"  Duration: [cyan]{transcript.Metadata.DurationSeconds:F1}s[/]");
             AnsiConsole.MarkupLine($"  Speakers: [cyan]{transcript.Metadata.SpeakerCount}[/]");
             AnsiConsole.MarkupLine($"  Turns: [cyan]{transcript.Turns.Count}[/]");
-            AnsiConsole.MarkupLine($"  Transcript: [cyan]{transcriptPath.EscapeMarkup()}[/]");
+            AnsiConsole.MarkupLine($"  Meeting file: [cyan]{meetingFilePath.EscapeMarkup()}[/]");
             AnsiConsole.WriteLine();
 
             return 0;
