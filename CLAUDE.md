@@ -16,11 +16,11 @@ provider-agnostic by reading JSON rather than calling an API. If you find yourse
 adding an ASR client here, that is the old purpose reasserting itself — don't.
 
 **Tech Stack:**
-- C# / .NET 8.0
+- C# / .NET 10.0
 - Spectre.Console (CLI UI)
 - Serilog (logging to file)
 - Azure.AI.OpenAI
-- System.Net.Http.Json
+- System.Net.Http.Json (in-box on net10.0; no package reference needed)
 
 ## Common Development Commands
 
@@ -36,12 +36,8 @@ dotnet build
 dotnet run -- <path-to-meeting-directory>
 
 # Run tests
-DOTNET_ROLL_FORWARD=LatestMajor dotnet test
+dotnet test
 ```
-
-The roll-forward variable is needed on machines that only have the .NET 10
-runtime installed; the project targets net8.0 and the test host will otherwise
-refuse to start.
 
 ### Run without arguments (interactive mode)
 ```bash

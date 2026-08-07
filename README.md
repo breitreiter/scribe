@@ -18,7 +18,7 @@ Scribe has no opinion about which ASR you used — it reads the JSON.
 
 ## Prerequisites
 
-- .NET 8.0 or later
+- .NET 10.0 or later
 - A raw transcription produced by WhisperX (or a legacy Azure Speech Fast Transcription response)
 - A chat model for the summary pass: Azure OpenAI, or any OpenAI-compatible
   endpoint (llama.cpp, vLLM, Ollama, LM Studio, a router, or api.openai.com)
@@ -95,7 +95,7 @@ Scribe writes into the meeting directory:
 ## Development
 
 Built with:
-- C# / .NET 8.0
+- C# / .NET 10.0
 - [Spectre.Console](https://spectreconsole.net/) for CLI UI
 - [Serilog](https://serilog.net/) for logging
 - [Azure.AI.OpenAI](https://github.com/Azure/azure-sdk-for-net/tree/main/sdk/openai/Azure.AI.OpenAI) for AI services
