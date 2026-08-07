@@ -75,13 +75,15 @@ These are the non-obvious commitments in the worked example. They are the whole
 value of the format; if they erode, the file is just a transcript dump.
 
 1. **Every section restates its context, at chunk granularity.** Each `##`
-   section opens with a full italic stamp naming date, participants **and their
-   roles** — *"(From the 2026-07-14 card activation onboarding research session,
-   6 participants: Dana Okafor (researcher), Priya Raman and Tom Alderidge
-   (customers)…)"* — and each `###` subsection opens with a compact one —
-   *"(Card activation onboarding research session, 2026-07-14.)"*. Roles belong
-   in the stamp because "the customer said X" is the retrievable claim and a bare
-   name cannot carry it. A retrieved chunk that
+   section opens with an italic stamp naming the meeting, date and participant
+   count — *"(Card activation onboarding session 3 debrief, 2026-07-14, 6
+   participants.)"* — and each `###` subsection opens with a shorter one. **Roles
+   ride with the claim, not the stamp**: each person is given their role at first
+   mention *within each section* ("Marcus Webb (product manager) committed to…"),
+   so the role survives in whichever chunk carries the claim, and the cost scales
+   with people mentioned rather than people present. Grilled 2026-08-06; a full
+   per-stamp roster was rejected as ~300 tokens of redundancy that grows with
+   headcount. A retrieved chunk that
    says "we decided to defer it" and nothing else is worse than useless; it is
    confidently misleading. Stamping `##` alone is not enough: chunkers usually
    split at the deepest heading, so the common chunk lands *inside* a `###` and
@@ -109,7 +111,10 @@ value of the format; if they erode, the file is just a transcript dump.
 6. **No cross-section anaphora.** Sections name entities. No "as mentioned
    above," no bare "he/she/they/it" referring across a section boundary. This
    constrains the summarizer prompt, not just the writer.
-7. **Never assert an unidentified speaker's identity.** `TranscriptFormatter.cs:7-11`
+7. **Never assert an unidentified speaker's identity, and never merge two of
+   them.** Unnamed labels stay distinct by display ID ("Unidentified speaker 6"),
+   because collapsing several to one string claims they are one person — a
+   fabricated coherence, and the same class of error as inventing a name. `TranscriptFormatter.cs:7-11`
    currently assigns placeholder names from a hardcoded list (Alice, Bob,
    Charles…). Harmless in a page a human reads once; in a model-consumed file
    every mention becomes a factual claim that a person named Alice attended and
@@ -117,12 +122,15 @@ value of the format; if they erode, the file is just a transcript dump.
    `speakers_identified: false`, and state in the header that the labels are
    diarization output. Never `SPEAKER_00` in prose either — that's provider
    leakage.
-8. **Verbatim words, folded backchannels.** The transcript keeps every
-   substantive word; content-free acknowledgements ("Yeah.", "Exactly.") are
-   absorbed into the continuing speaker's turn as `[S2: Yeah.]`. Turn IDs are
-   numbered **pre-fold**, so gaps (T000 → T003) mark folding and every ID still
-   resolves against `.scribe/raw-transcription.json`. No disfluency stripping:
-   summary quotes must match the transcript exactly.
+8. **Complete and verbatim, with folded backchannels.** The transcript contains
+   **every turn** — never a selection, however long the meeting. Content-free
+   acknowledgements are absorbed into the turn they interrupt and rendered inline
+   with their own ID and speaker: `[T003 folded: Dana Okafor: Mm-hmm.]`. Turn IDs
+   are numbered **pre-fold**, so an ID gap means folding *and nothing else*, and
+   every ID is accounted for either as a turn line or a fold marker. No disfluency
+   stripping: summary quotes must match the transcript exactly.
+   Grilled 2026-08-06: eliding turns was rejected because it makes gaps ambiguous
+   and can leave a cited turn absent from the file it is cited in.
 9. **Reference the source media, and make timestamps scrubbable.** The recording
    is normally a Zoom video the user still has. Every timestamp in the file is
    therefore an actionable pointer for a human — but only if it is `H:MM:SS`;
@@ -170,9 +178,11 @@ existing meeting directories keep working (shared with the transcription plan).
 - `TranscriptTurn.Id` — `"T042"`, assigned in `TranscriptFormatter`.
 - `TranscriptSummary.Abstract` — replaces `Overview`. Renamed deliberately: an
   "overview" invites 2–3 loose paragraphs, an "abstract" invites one dense one.
-- `TranscriptSummary.Decisions` — `{ id, decision, rationale, turnIds }`. New,
-  and the highest-value field for the "what did we agree" retrieval that
-  motivates the whole pivot.
+- `TranscriptSummary.Decisions` — `{ decision, rationale, turnIds }`. New, and the
+  highest-value field for the "what did we agree" retrieval that motivates the
+  whole pivot. **The ID is derived, not stored**: `D-<first cited turn ID>`, with a
+  suffix on collision. Ordinal IDs go stale silently across re-summarization, which
+  now happens on every speaker rename.
 - `TranscriptSummary.OpenQuestions` — `{ question, turnIds }`. New.
 - `SummaryKeyPoint.TurnIds` / `SummaryActionItem.TurnIds` — string IDs replacing
   `TurnIndices`.
@@ -308,8 +318,9 @@ this plan when you do it.
    into summary + segmentation calls; assert against truncation rather than
    discovering it mid-object. Closes `bugs/local-model-json-fence.md`. Everything
    below enlarges the model response, so this lands first. Commit.
-1. ~~Rewrite the worked example around the six-speaker research session.~~ Done
-   2026-08-06. **Grill it before building** — that pass has not happened.
+1. ~~Rewrite the worked example, then grill it.~~ Done 2026-08-06; four decisions
+   recorded in the example's "Settled by grilling" table and folded into the rules
+   above.
 2. Model changes: turn IDs, decisions, open questions, topic ranges,
    `speakersIdentified`, `summaryStatus`, roles on the speaker map. Commit.
 3. Backchannel folding in `TranscriptFormatter` + tests (pre-fold ID numbering is
