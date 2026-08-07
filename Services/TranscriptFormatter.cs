@@ -5,6 +5,7 @@ namespace Scribe.Services;
 public class TranscriptFormatter
 {
     private const double TurnSplitPauseSeconds = 2.0;
+    public const string UnidentifiedSpeakerId = "0";
 
     public static Transcript FormatTranscript(RawTranscript raw)
     {
@@ -19,14 +20,20 @@ public class TranscriptFormatter
         }
 
         // Neutral labels only. A name here would be a factual claim that a person
-        // attended and holds a view; names come from a human, once identification lands.
-        var speakers = speakerIds.Values.ToDictionary(id => id, id => $"Speaker {id}");
+        // attended and holds a view; names come from a human, in the naming loop.
+        var speakers = speakerIds.Values.ToDictionary(
+            id => id,
+            id => new Speaker { Name = $"Speaker {id}", Identified = false });
 
         int IdOf(RawSegment segment) =>
             segment.Speaker != null ? speakerIds[segment.Speaker] : 0;
 
+        // Unnamed labels stay distinct: collapsing them would claim several voices
+        // are one person, which is the same fabrication as inventing a name.
         string NameOf(RawSegment segment) =>
-            segment.Speaker != null ? speakers[speakerIds[segment.Speaker]] : "Unidentified speaker";
+            segment.Speaker != null
+                ? speakers[speakerIds[segment.Speaker]].Name
+                : "Unidentified speaker";
 
         var turns = new List<TranscriptTurn>();
 
@@ -58,6 +65,11 @@ public class TranscriptFormatter
             turns.Add(currentTurn);
         }
 
+        // Assigned once, in order, before any folding. Every citation resolves
+        // through these, so nothing downstream may renumber them.
+        for (int i = 0; i < turns.Count; i++)
+            turns[i].Id = TurnId(i);
+
         return new Transcript
         {
             Metadata = new TranscriptMetadata
@@ -66,19 +78,11 @@ public class TranscriptFormatter
                 RecordingDate = DateTime.Now.ToString("yyyy-MM-dd"),
                 SpeakerCount = speakerIds.Count,
                 Speakers = speakers,
+                SpeakersIdentified = SpeakerIdentification.None,
+                SummaryStatus = SummaryStatus.Unavailable
             },
-            Summary = new TranscriptSummary
-            {
-                ActionItems = new List<SummaryActionItem>()
-            },
-            Topics = new List<TranscriptTopic>
-            {
-                new TranscriptTopic
-                {
-                    Title = "Full Transcript",
-                    StartTime = "00:00"
-                }
-            },
+            Summary = new TranscriptSummary(),
+            Topics = new List<TranscriptTopic>(),
             Turns = turns
         };
 
@@ -91,9 +95,15 @@ public class TranscriptFormatter
         };
     }
 
-    private static string FormatTime(double seconds)
+    public static string TurnId(int index) => $"T{index:D3}";
+
+    /// <summary>
+    /// H:MM:SS. Timestamps are scrub targets for the source recording, so an hour
+    /// has to roll over — "65:12" is not something a video player accepts.
+    /// </summary>
+    public static string FormatTime(double seconds)
     {
-        var totalSeconds = (long)seconds;
-        return $"{totalSeconds / 60:D2}:{totalSeconds % 60:D2}";
+        var total = (long)seconds;
+        return $"{total / 3600}:{total / 60 % 60:D2}:{total % 60:D2}";
     }
 }

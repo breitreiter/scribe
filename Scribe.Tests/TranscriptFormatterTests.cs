@@ -58,8 +58,8 @@ public class TranscriptFormatterTests
         var result = TranscriptFormatter.FormatTranscript(Raw([Phrase(1, 65000, 10000, "Hi")]));
 
         // StartTime = 65s → 01:05, EndTime = 75s → 01:15
-        Assert.Equal("01:05", result.Turns[0].StartTime);
-        Assert.Equal("01:15", result.Turns[0].EndTime);
+        Assert.Equal("0:01:05", result.Turns[0].StartTime);
+        Assert.Equal("0:01:15", result.Turns[0].EndTime);
     }
 
     // ── Turn splitting ──────────────────────────────────────────────────────
@@ -136,7 +136,7 @@ public class TranscriptFormatterTests
 
         var result = TranscriptFormatter.FormatTranscript(Raw(phrases));
 
-        Assert.Equal("00:08", result.Turns[^1].EndTime);
+        Assert.Equal("0:00:08", result.Turns[^1].EndTime);
     }
 
     // ── Speaker naming ──────────────────────────────────────────────────────
@@ -186,6 +186,31 @@ public class TranscriptFormatterTests
         Assert.Equal(2, result.Metadata.SpeakerCount);
     }
 
+    // ── Turn IDs ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void TurnIds_AreSequentialAndZeroPadded()
+    {
+        var phrases = Enumerable.Range(0, 3).Select(i => Phrase(i + 1, i * 5000L, 1000, $"Text {i}"));
+
+        var result = TranscriptFormatter.FormatTranscript(Raw(phrases));
+
+        Assert.Equal(["T000", "T001", "T002"], result.Turns.Select(t => t.Id));
+    }
+
+    [Fact]
+    public void TurnIds_KeepSortingLexicallyPastTen()
+    {
+        // Zero-padding is what lets a reader (or a chunker) order IDs without parsing them.
+        var phrases = Enumerable.Range(0, 12).Select(i => Phrase(i + 1, i * 5000L, 1000, $"Text {i}"));
+
+        var result = TranscriptFormatter.FormatTranscript(Raw(phrases));
+
+        Assert.Equal("T011", result.Turns[^1].Id);
+        Assert.Equal(result.Turns.Select(t => t.Id).OrderBy(id => id, StringComparer.Ordinal),
+                     result.Turns.Select(t => t.Id));
+    }
+
     // ── Metadata ────────────────────────────────────────────────────────────
 
     [Fact]
@@ -207,11 +232,11 @@ public class TranscriptFormatterTests
     // ── Time formatting ─────────────────────────────────────────────────────
 
     [Theory]
-    [InlineData(0,       "00:00")]
-    [InlineData(1000,    "00:01")]
-    [InlineData(60000,   "01:00")]
-    [InlineData(65000,   "01:05")]
-    [InlineData(3661000, "61:01")] // > 1 hour, no hours segment
+    [InlineData(0,       "0:00:00")]
+    [InlineData(1000,    "0:00:01")]
+    [InlineData(60000,   "0:01:00")]
+    [InlineData(65000,   "0:01:05")]
+    [InlineData(3661000, "1:01:01")] // hours roll over: timestamps are video scrub targets
     public void TimeFormatting_CorrectOutput(long offsetMs, string expected)
     {
         var result = TranscriptFormatter.FormatTranscript(Raw([Phrase(1, offsetMs, 1000, "Hi")]));

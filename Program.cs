@@ -112,8 +112,18 @@ class Program
 
             if (File.Exists(transcriptPath))
             {
-                var existingTranscript = JsonSerializer.Deserialize<Transcript>(
-                    await File.ReadAllTextAsync(transcriptPath), Json.CaseInsensitive);
+                // A cache written by an older scribe may not deserialize into the current
+                // shape. That is not a failure — it just means there is no usable cache.
+                Transcript? existingTranscript = null;
+                try
+                {
+                    existingTranscript = JsonSerializer.Deserialize<Transcript>(
+                        await File.ReadAllTextAsync(transcriptPath), Json.CaseInsensitive);
+                }
+                catch (JsonException ex)
+                {
+                    Log.Information(ex, "Existing transcript.json could not be read; reformatting from raw");
+                }
 
                 if (existingTranscript?.Summary?.KeyPoints?.Count > 0)
                 {
@@ -138,6 +148,7 @@ class Program
                     var summaryService = new SummaryService(appSettings.Completion);
                     var summary = await summaryService.GenerateSummaryAsync(transcript);
                     transcript.Summary = summary;
+                    transcript.Metadata.SummaryStatus = SummaryStatus.Ok;
 
                     if (!string.IsNullOrWhiteSpace(summary.OneLiner))
                     {

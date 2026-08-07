@@ -67,9 +67,11 @@ public class SummarySchemaTests
         const string response = """
             {
               "oneLiner": "The team agreed to surface in-app activation.",
-              "overview": "Two customers could not find the activation control.",
-              "keyPoints": [{ "point": "Activation is not discoverable", "turnIndices": [1, 2] }],
-              "actionItems": [{ "item": "Design the in-app path", "turnIndices": [7], "assignedTo": "Dana" }]
+              "abstract": "Two customers could not find the activation control.",
+              "decisions": [{ "decision": "Scope in-app activation", "rationale": "API already supports it", "turnIds": ["T017"] }],
+              "actionItems": [{ "item": "Design the in-app path", "turnIds": ["T007"], "assignedTo": "Dana" }],
+              "openQuestions": [{ "question": "Who designs the screen?", "turnIds": ["T019"] }],
+              "keyPoints": [{ "point": "Activation is not discoverable", "turnIds": ["T001", "T002"] }]
             }
             """;
 
@@ -77,7 +79,9 @@ public class SummarySchemaTests
 
         Assert.Equal("The team agreed to surface in-app activation.", summary.OneLiner);
         Assert.Single(summary.KeyPoints!);
-        Assert.Equal([1, 2], summary.KeyPoints![0].TurnIndices);
+        Assert.Equal(["T001", "T002"], summary.KeyPoints![0].TurnIds);
+        Assert.Equal("D-T017", summary.Decisions[0].BaseId);
+        Assert.Single(summary.OpenQuestions);
         Assert.Equal("Dana", summary.ActionItems[0].AssignedTo);
     }
 
@@ -86,8 +90,8 @@ public class SummarySchemaTests
     {
         const string response = """
             {
-              "oneLiner": "x", "overview": "y", "keyPoints": [],
-              "actionItems": [{ "item": "Review next week", "turnIndices": [8], "assignedTo": null }]
+              "oneLiner": "x", "abstract": "y", "keyPoints": [], "decisions": [], "openQuestions": [],
+              "actionItems": [{ "item": "Review next week", "turnIds": ["T008"], "assignedTo": null }]
             }
             """;
 

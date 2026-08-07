@@ -94,8 +94,12 @@ public class SummaryService
             // Clean up any turn markers that slipped through (safety net)
             CleanupTurnMarkers(summary);
 
-            Log.Information("Successfully generated grounded summary with {KeyPointCount} key points and {ActionItemCount} action items",
-                summary.KeyPoints?.Count ?? 0, summary.ActionItems.Count);
+            DropUnresolvableCitations(summary, transcript);
+
+            Log.Information("Grounded summary: {KeyPoints} key points, {Decisions} decisions, " +
+                            "{Actions} action items, {Questions} open questions",
+                summary.KeyPoints?.Count ?? 0, summary.Decisions.Count,
+                summary.ActionItems.Count, summary.OpenQuestions.Count);
 
             return summary;
         }
@@ -105,6 +109,49 @@ public class SummaryService
             throw;
         }
     }
+
+    private static string GetSystemPrompt() =>
+        """
+        You are an expert meeting summarizer. Your output is read by a retrieval system one
+        section at a time, not by a person reading the document top to bottom.
+
+        CRITICAL REQUIREMENTS:
+        1. Every statement MUST be grounded in the transcript. Do not infer or add anything
+           that is not stated in it.
+        2. Cite turns by their ID exactly as it appears in the transcript (e.g. "T017"), in the
+           turnIds arrays. Never invent an ID, and never cite one that is not in the transcript.
+        3. Put citations ONLY in the turnIds arrays, never in the prose text.
+        4. Name people explicitly in every section. Do not write "as mentioned above", "the
+           former", or a bare "he/she/they/it" referring to something in another section. Each
+           section is read in isolation, so a cross-section reference resolves to nothing.
+        5. Return an empty array for decisions, actionItems or openQuestions if the meeting had
+           none. Never omit the field.
+        6. A decision is something the meeting SETTLED. An open question was raised and left
+           unresolved. Something discussed but neither settled nor left explicitly open is a key
+           point, not a decision.
+        7. Refer to speakers exactly as the transcript names them. If a speaker is called
+           "Speaker 3" or "Unidentified speaker", use that — do not guess at who they are.
+
+        OUTPUT FORMAT — a JSON object:
+        {
+          "oneLiner": "A single sentence (max 20 words) summarizing the entire meeting",
+          "abstract": "One dense paragraph: what happened and what came of it",
+          "decisions": [
+            { "decision": "What was settled", "rationale": "Why, if stated; else null", "turnIds": ["T017"] }
+          ],
+          "actionItems": [
+            { "item": "What will be done", "turnIds": ["T017"], "assignedTo": "Person if named, else null" }
+          ],
+          "openQuestions": [
+            { "question": "What was left unresolved", "turnIds": ["T019"] }
+          ],
+          "keyPoints": [
+            { "point": "A substantive point discussed", "turnIds": ["T001", "T004"] }
+          ]
+        }
+
+        Be precise and factual. Turn references belong ONLY in turnIds arrays.
+        """;
 
     // Last resort for a server that accepts response_format and does not honour it.
     // The fix for that is a schema (see ChatClientFactory); this only keeps a
@@ -123,51 +170,50 @@ public class SummaryService
         return content[start..(end + 1)];
     }
 
-    private string GetSystemPrompt()
+    /// <summary>
+    /// Removes cited turn IDs that do not exist in this transcript. A hallucinated
+    /// citation is worse than a missing one: it looks resolvable and silently is not.
+    /// Dropping the citation keeps the claim, which is still grounded by the ones
+    /// that resolved; a claim left with no citations at all is logged.
+    /// </summary>
+    private static void DropUnresolvableCitations(TranscriptSummary summary, Transcript transcript)
     {
-        return @"You are an expert meeting summarizer. Your task is to analyze meeting transcripts and create comprehensive, grounded summaries.
+        var known = transcript.Turns.Select(t => t.Id).ToHashSet();
+        var dropped = 0;
 
-CRITICAL REQUIREMENTS:
-1. Every statement in your summary MUST be grounded in the actual transcript
-2. For each key point and action item, you MUST provide the turn indices (0-based) where that information appears
-3. Multiple turn indices should be provided when information spans multiple turns
-4. Turn indices must be accurate - they are the only way a reader can resolve a claim back to what was said
-5. Do not infer or add information that is not explicitly stated in the transcript
-6. DO NOT include turn references in the text itself (e.g., ""(turns 5-10)"", ""(turn 23)""). Use ONLY the turnIndices array for grounding.
+        void Clean(List<string> ids, string claim)
+        {
+            var removed = ids.RemoveAll(id => !known.Contains(id));
+            if (removed == 0) return;
 
-OUTPUT FORMAT:
-You must return a JSON object with the following structure:
-{
-  ""oneLiner"": ""A single sentence (max 20 words) summarizing the entire meeting"",
-  ""overview"": ""A 2-3 paragraph overview of the meeting discussion"",
-  ""keyPoints"": [
-    {
-      ""point"": ""A specific key point or topic discussed (NO turn markers in text)"",
-      ""turnIndices"": [0, 5, 12]
-    }
-  ],
-  ""actionItems"": [
-    {
-      ""item"": ""A specific action item or next step (NO turn markers in text)"",
-      ""turnIndices"": [23, 24],
-      ""assignedTo"": ""Person's name if mentioned, otherwise null""
-    }
-  ]
-}
+            dropped += removed;
+            if (ids.Count == 0)
+                Log.Warning("Summary claim has no resolvable citations after cleanup: {Claim}", claim);
+        }
 
-Be precise, factual, and always ground your summary in the actual transcript content. Remember: turn references belong ONLY in the turnIndices arrays, never in the text fields.";
+        foreach (var keyPoint in summary.KeyPoints ?? []) Clean(keyPoint.TurnIds, keyPoint.Point);
+        foreach (var item in summary.ActionItems) Clean(item.TurnIds, item.Item);
+        foreach (var decision in summary.Decisions) Clean(decision.TurnIds, decision.Decision);
+        foreach (var question in summary.OpenQuestions) Clean(question.TurnIds, question.Question);
+
+        if (dropped > 0)
+            Log.Warning("Dropped {Count} citation(s) referring to turns not in the transcript", dropped);
     }
 
+    /// <summary>
+    /// Strips turn references out of the PROSE. Citations are wanted — in the turnIds
+    /// arrays, which the writer renders as bracketed IDs. A model that also writes
+    /// "(turn 5)" or "[T017]" into the text produces a doubled, and often wrong,
+    /// citation next to the correct one.
+    /// </summary>
     private static void CleanupTurnMarkers(TranscriptSummary summary)
     {
-        // Regex patterns to match common turn marker formats:
-        // (turns 5-10), (turn 23), (turns 1, 2, 5), etc.
         var patterns = new[]
         {
-            @"\s*\(turns?\s+[\d\s,–-]+\)",  // (turn 5) or (turns 5-10, 12-15)
-            @"\s*\[turns?\s+[\d\s,–-]+\]",  // [turn 5] or [turns 5-10]
-            @"\s*\bturn\s+\d+\b",            // turn 5 (without parens)
-            @"\s*\bturns\s+[\d\s,–-]+\b"    // turns 5-10 (without parens)
+            @"\s*\(turns?\s+[\dT\s,–-]+\)",   // (turn 5), (turns T1-T4)
+            @"\s*\[turns?\s+[\dT\s,–-]+\]",   // [turn 5]
+            @"\s*\[T\d+(\s*,\s*T\d+)*\]",    // [T017] or [T017, T019]
+            @"\s*\bturns?\s+\d+\b"             // turn 5
         };
 
         foreach (var pattern in patterns)
@@ -175,31 +221,29 @@ Be precise, factual, and always ground your summary in the actual transcript con
             var regex = new System.Text.RegularExpressions.Regex(pattern,
                 System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
-            // Clean overview
-            if (!string.IsNullOrEmpty(summary.Overview))
+            if (!string.IsNullOrEmpty(summary.Abstract))
+                summary.Abstract = regex.Replace(summary.Abstract, "").Trim();
+
+            foreach (var keyPoint in summary.KeyPoints ?? [])
+                keyPoint.Point = regex.Replace(keyPoint.Point, "").Trim();
+
+            foreach (var actionItem in summary.ActionItems)
+                actionItem.Item = regex.Replace(actionItem.Item, "").Trim();
+
+            foreach (var decision in summary.Decisions)
             {
-                summary.Overview = regex.Replace(summary.Overview, "").Trim();
+                decision.Decision = regex.Replace(decision.Decision, "").Trim();
+                if (!string.IsNullOrEmpty(decision.Rationale))
+                    decision.Rationale = regex.Replace(decision.Rationale, "").Trim();
             }
 
-            // Clean key points
-            if (summary.KeyPoints != null)
-            {
-                foreach (var keyPoint in summary.KeyPoints)
-                {
-                    keyPoint.Point = regex.Replace(keyPoint.Point, "").Trim();
-                }
-            }
-
-            // Clean action items
-            if (summary.ActionItems != null)
-            {
-                foreach (var actionItem in summary.ActionItems)
-                {
-                    actionItem.Item = regex.Replace(actionItem.Item, "").Trim();
-                }
-            }
+            foreach (var question in summary.OpenQuestions)
+                question.Question = regex.Replace(question.Question, "").Trim();
         }
     }
+
+    private static string DescribeSpeaker(Speaker speaker) =>
+        string.IsNullOrWhiteSpace(speaker.Role) ? speaker.Name : $"{speaker.Name} ({speaker.Role})";
 
     private string BuildSummaryPrompt(Transcript transcript)
     {
@@ -208,7 +252,7 @@ Be precise, factual, and always ground your summary in the actual transcript con
         sb.AppendLine();
         sb.AppendLine("MEETING METADATA:");
         sb.AppendLine($"Duration: {transcript.Metadata.DurationSeconds:F1} seconds");
-        sb.AppendLine($"Speakers: {string.Join(", ", transcript.Metadata.Speakers.Values)}");
+        sb.AppendLine($"Speakers: {string.Join(", ", transcript.Metadata.Speakers.Values.Select(DescribeSpeaker))}");
         if (!string.IsNullOrWhiteSpace(transcript.Metadata.MeetingTitle))
         {
             sb.AppendLine($"Title: {transcript.Metadata.MeetingTitle}");
@@ -224,7 +268,7 @@ Be precise, factual, and always ground your summary in the actual transcript con
         for (int i = 0; i < transcript.Turns.Count; i++)
         {
             var turn = transcript.Turns[i];
-            sb.AppendLine($"[Turn {i}] {turn.SpeakerName} ({turn.StartTime}-{turn.EndTime}):");
+            sb.AppendLine($"[{turn.Id}] {turn.SpeakerName} ({turn.StartTime}-{turn.EndTime}):");
             sb.AppendLine(turn.Text);
             sb.AppendLine();
         }

@@ -126,8 +126,8 @@ public class RawTranscriptReaderTests
         var transcript = TranscriptFormatter.FormatTranscript(WhisperX());
 
         Assert.Equal(6, transcript.Metadata.SpeakerCount);
-        Assert.Equal("Speaker 1", transcript.Metadata.Speakers[1]);
-        Assert.Equal("Speaker 6", transcript.Metadata.Speakers[6]);
+        Assert.Equal("Speaker 1", transcript.Metadata.Speakers[1].Name);
+        Assert.Equal("Speaker 6", transcript.Metadata.Speakers[6].Name);
     }
 
     [Fact]
