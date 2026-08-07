@@ -54,22 +54,25 @@ Diarization quality on a single-channel recording of six people with cross-talk
 is the weakest link in this whole pipeline. Expect to correct labels afterwards;
 that is what Scribe's speaker-naming step is for.
 
-## Hardware caveat — unverified
+## CPU is a legitimate choice here
 
 WhisperX's ASR backend is faster-whisper (CTranslate2), whose GPU support has
-historically been **CUDA-only**. On an AMD/ROCm box (strix halo) that means ASR
-may silently run on CPU. This has not been tested here — check before assuming
-the GPU is doing anything:
+historically been **CUDA-only**, so on an AMD/ROCm machine it runs on CPU.
+
+For a weekly meeting that is usually the right trade: transcription is slow but
+unattended, and the setup cost of getting GPU inference working on a work laptop
+is paid every time the environment changes. Run it on CPU, expect the fans, come
+back later. **The work laptop deliberately runs CPU-only** (decided 2026-08-06).
+
+If throughput ever does matter, check what CT2 actually sees before assuming a
+GPU is helping:
 
 ```bash
 python -c "import ctranslate2; print(ctranslate2.get_cuda_device_count())"
-whisperx sample.wav --model large-v3 --compute_type float16 --diarize   # watch device + wall time
 ```
 
-Strix halo's CPU is strong, so CPU-only may still be acceptable — measure
-against audio length rather than assuming. If it's too slow, the fallback is
-whisper.cpp (Vulkan) for ASR plus pyannote for diarization, producing the same
-JSON shape by hand.
+The fallback for a fast local path is whisper.cpp (Vulkan) for ASR plus pyannote
+for diarization, emitting the same JSON shape.
 
 ## Output format Scribe reads
 

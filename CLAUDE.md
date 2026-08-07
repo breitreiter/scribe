@@ -55,8 +55,12 @@ The project uses `appsettings.json` for configuration (gitignored). A template i
 - `appsettings.example.json` - Template file committed to repo
 - Copy to `appsettings.json` and add Azure credentials
 
-Required settings:
-- **Completion.AzureOpenAI**: Endpoint, ApiKey, DeploymentName, ModelName
+Required settings depend on `Completion.Provider`, and `AppSettings.IsValid()`
+validates only the selected one — a machine running a local model must not be
+forced to hold Azure credentials:
+- `AzureOpenAI` → **Completion.AzureOpenAI**: Endpoint, ApiKey, DeploymentName, ModelName
+- `OpenAI` → **Completion.OpenAI**: Model, plus optional Endpoint (any
+  OpenAI-compatible server; omit for api.openai.com) and ApiKey
 
 Logging level is configurable via `Logging:LogLevel:Default` (defaults to Warning).
 
@@ -86,8 +90,13 @@ Logging level is configurable via `Logging:LogLevel:Default` (defaults to Warnin
 - Concatenates fragmented lines from the same speaker (splits on >2s pauses)
 - Creates TranscriptTurn objects with formatted timestamps
 
+**ChatClientFactory** (Services/ChatClientFactory.cs):
+- Builds the `IChatClient` for the configured provider
+- Azure goes through the Responses API (reasoning models spend tokens there);
+  the OpenAI-compatible path is plain chat completions with a swappable base URL
+
 **SummaryService** (Services/SummaryService.cs):
-- Generates AI summaries using Azure OpenAI
+- Generates AI summaries from an injected `IChatClient` — provider-agnostic
 - Creates oneLiner, overview, keyPoints, and actionItems
 - Uses structured JSON output with grounding to transcript turns
 

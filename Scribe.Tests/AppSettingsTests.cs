@@ -62,6 +62,63 @@ public class AppSettingsTests
     }
 
     [Fact]
+    public void OpenAIProvider_DoesNotRequireAzureCredentials()
+    {
+        var settings = new AppSettings
+        {
+            Completion = new CompletionSettings
+            {
+                Provider = "OpenAI",
+                OpenAI = new OpenAISettings { Endpoint = "http://imp:8080/v1", Model = "glm-4.6" }
+            }
+        };
+
+        var result = settings.IsValid(out var errors);
+
+        Assert.True(result);
+        Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void OpenAIProvider_MissingModel_ReturnsError()
+    {
+        var settings = new AppSettings
+        {
+            Completion = new CompletionSettings { Provider = "OpenAI" }
+        };
+
+        settings.IsValid(out var errors);
+
+        Assert.Contains(errors, e => e.Contains("Completion.OpenAI.Model"));
+    }
+
+    [Fact]
+    public void OpenAIProvider_NeedsNoEndpoint_DefaultsToOpenAIProper()
+    {
+        var settings = new AppSettings
+        {
+            Completion = new CompletionSettings
+            {
+                Provider = "OpenAI",
+                OpenAI = new OpenAISettings { Model = "gpt-4o-mini" }
+            }
+        };
+
+        Assert.True(settings.IsValid(out _));
+    }
+
+    [Fact]
+    public void UnknownProvider_ReturnsError()
+    {
+        var settings = ValidSettings();
+        settings.Completion.Provider = "Ollama";
+
+        settings.IsValid(out var errors);
+
+        Assert.Contains(errors, e => e.Contains("Completion.Provider"));
+    }
+
+    [Fact]
     public void AllFieldsMissing_ReturnsMultipleErrors()
     {
         var settings = new AppSettings();

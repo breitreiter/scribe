@@ -20,7 +20,8 @@ Scribe has no opinion about which ASR you used — it reads the JSON.
 
 - .NET 8.0 or later
 - A raw transcription produced by WhisperX (or a legacy Azure Speech Fast Transcription response)
-- Azure OpenAI access, for the summary pass
+- A chat model for the summary pass: Azure OpenAI, or any OpenAI-compatible
+  endpoint (llama.cpp, vLLM, Ollama, LM Studio, a router, or api.openai.com)
 
 ## Setup
 
@@ -33,8 +34,25 @@ Scribe has no opinion about which ASR you used — it reads the JSON.
    ```bash
    cp appsettings.example.json appsettings.json
    ```
-   Edit `appsettings.json` and add your **Completion.AzureOpenAI** credentials
-   (Endpoint, API Key, DeploymentName).
+   Edit `appsettings.json` and configure the summariser. `Completion.Provider`
+   selects between two paths, and only the selected one is validated — a machine
+   using a local model needs no Azure credentials:
+
+   ```jsonc
+   // Azure OpenAI (uses the Responses API, so reasoning models work)
+   "Completion": {
+     "Provider": "AzureOpenAI",
+     "AzureOpenAI": { "Endpoint": "...", "ApiKey": "...", "DeploymentName": "gpt-4o-mini" }
+   }
+
+   // Any OpenAI-compatible endpoint. Endpoint includes the version segment;
+   // omit it entirely to talk to api.openai.com. ApiKey may be blank for
+   // local servers that ignore it.
+   "Completion": {
+     "Provider": "OpenAI",
+     "OpenAI": { "Endpoint": "http://localhost:8080/v1", "ApiKey": "", "Model": "my-model" }
+   }
+   ```
 
 3. **Build**
    ```bash
@@ -68,6 +86,7 @@ Scribe writes into the meeting directory:
 
 - ✅ Speaker turn formatting from diarized ASR output
 - ✅ AI-generated summaries with grounded key points and action items
+- ✅ Summarisation on a local model or Azure OpenAI, selected by config
 - ✅ Idempotent re-runs for fast iteration on output format
 - ⏳ Meeting markdown record (`<date>-<slug>.md`) built for RAG — see `plans/llm-native-output.md`
 - ⏳ Interactive speaker name assignment

@@ -135,7 +135,7 @@ class Program
                 AnsiConsole.MarkupLine("Generating AI summary...");
                 try
                 {
-                    var summaryService = new SummaryService(appSettings.Completion.AzureOpenAI);
+                    var summaryService = new SummaryService(appSettings.Completion);
                     var summary = await summaryService.GenerateSummaryAsync(transcript);
                     transcript.Summary = summary;
 

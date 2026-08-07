@@ -1,7 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using Azure;
-using Azure.AI.OpenAI;
 using Microsoft.Extensions.AI;
 using Scribe.Models;
 using Scribe.Models.Configuration;
@@ -12,20 +10,16 @@ namespace Scribe.Services;
 
 public class SummaryService
 {
-    private readonly AzureOpenAISettings _settings;
     private readonly IChatClient _chatClient;
 
-    public SummaryService(AzureOpenAISettings settings)
+    public SummaryService(CompletionSettings settings)
+        : this(ChatClientFactory.Create(settings))
     {
-        _settings = settings;
-        var parsed = new Uri(_settings.Endpoint);
-        var baseUri = new Uri($"{parsed.Scheme}://{parsed.Authority}/");
+    }
 
-        var clientOptions = new AzureOpenAIClientOptions(AzureOpenAIClientOptions.ServiceVersion.V2025_03_01_Preview);
-        var azureClient = new AzureOpenAIClient(baseUri, new AzureKeyCredential(_settings.ApiKey), clientOptions);
-
-        var model = _settings.ModelName ?? _settings.DeploymentName;
-        _chatClient = azureClient.GetResponsesClient().AsIChatClient(model);
+    public SummaryService(IChatClient chatClient)
+    {
+        _chatClient = chatClient;
     }
 
     public async Task<TranscriptSummary> GenerateSummaryAsync(Transcript transcript)
@@ -42,8 +36,8 @@ public class SummaryService
 
         var chatOptions = new ChatOptions
         {
-            // o4-mini only supports default temperature (1)
-            // o4-mini uses reasoning tokens internally, so need high limit for both reasoning + output
+            // Left at the model default: o4-mini accepts only temperature 1. The ceiling is
+            // high because reasoning models spend tokens internally before emitting output.
             MaxOutputTokens = 16000,
             ResponseFormat = ChatResponseFormat.Json
         };
@@ -68,7 +62,7 @@ public class SummaryService
                 throw new InvalidOperationException("Empty response content from AI");
             }
 
-            Log.Debug("Received summary response from Azure OpenAI ({Length} chars): {Response}", content.Length, content);
+            Log.Debug("Received summary response ({Length} chars): {Response}", content.Length, content);
 
             var summary = JsonSerializer.Deserialize<TranscriptSummary>(content, Json.CaseInsensitive);
 
@@ -87,7 +81,7 @@ public class SummaryService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error generating summary with Azure OpenAI");
+            Log.Error(ex, "Error generating summary");
             throw;
         }
     }
@@ -100,7 +94,7 @@ CRITICAL REQUIREMENTS:
 1. Every statement in your summary MUST be grounded in the actual transcript
 2. For each key point and action item, you MUST provide the turn indices (0-based) where that information appears
 3. Multiple turn indices should be provided when information spans multiple turns
-4. Turn indices must be accurate - they will be used to create clickable links in the UI
+4. Turn indices must be accurate - they are the only way a reader can resolve a claim back to what was said
 5. Do not infer or add information that is not explicitly stated in the transcript
 6. DO NOT include turn references in the text itself (e.g., ""(turns 5-10)"", ""(turn 23)""). Use ONLY the turnIndices array for grounding.
 
