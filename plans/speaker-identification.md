@@ -42,9 +42,17 @@ Console I/O stays out of the service layer.
 1. Report how many distinct labels diarization produced, and warn when that
    disagrees with the number of people the user expected.
 2. For each label, in order of first appearance:
-   - Show enough of that speaker's lines to recognise them — collect until ≥20
-     words or 3 turns, whichever comes first, each with its timestamp, truncated
-     to `AnsiConsole.Profile.Width - 4`.
+   - **Lead with the scrub target.** The user is normally working from a Zoom
+     recording, so identification is visual: jump to the first moment this
+     speaker talks and look at who is on screen. Print that timestamp first and
+     prominently, as `H:MM:SS`, not buried after the text.
+   - Offer **two or three** candidate timestamps, not just the first: their first
+     turn, plus their longest. A first turn is often a two-word interjection over
+     someone else, or spoken while the speaker's camera is off; a long turn is
+     where the active-speaker view will actually be showing them.
+   - Then show enough lines to confirm — collect until ≥20 words or 3 turns,
+     whichever comes first, truncated to `AnsiConsole.Profile.Width - 4`. The
+     text corroborates the video; it is no longer the primary evidence.
    - Prompt for a **name** and a **role**, both blank-able. Blank keeps
      `Speaker N` and leaves `speakers_identified: false`.
    - Offer **merge**: "this is the same person as <already-named speaker>" —
@@ -56,10 +64,17 @@ Console I/O stays out of the service layer.
 
 ## Key implementation notes
 
+- **Timestamps in this loop must be `H:MM:SS`.** `TranscriptFormatter.FormatTime`
+  currently emits minutes:seconds with no hours rollover, so a 57-minute meeting
+  is fine but a 1h05m one renders as `65:12` — useless to type into a video
+  scrubber. Fix before this loop is usable in anger.
 - Merge must renumber nothing: display IDs are already assigned, and rewriting
   them would invalidate turn IDs the summary cites. Merging label B into A
   rewrites B's turns to A and removes B from the map, leaving a gap in the ID
   sequence. Gaps are fine; unstable citations are not.
+- **Renaming after a cached summary re-summarizes** (settled 2026-08-06). The
+  cached summary references speakers by name, so a rename makes it stale, and a
+  stale attribution in a model-read file is worse than the cost of regenerating.
 - Run the loop *before* summarization where possible, so the summary can use real
   names and roles. On a reprocess with a cached summary, renaming means the
   cached summary's speaker references go stale — either re-summarize or leave the

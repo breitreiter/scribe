@@ -106,7 +106,13 @@ value of the format; if they erode, the file is just a transcript dump.
    numbered **pre-fold**, so gaps (T000 → T003) mark folding and every ID still
    resolves against `.scribe/raw-transcription.json`. No disfluency stripping:
    summary quotes must match the transcript exactly.
-9. **Frontmatter carries the filters.** date, participants, topics, duration,
+9. **Reference the source media, and make timestamps scrubbable.** The recording
+   is normally a Zoom video the user still has. Every timestamp in the file is
+   therefore an actionable pointer for a human — but only if it is `H:MM:SS`;
+   `TranscriptFormatter.FormatTime` currently emits `65:12` for 1h05m, which no
+   video player accepts. Name the media file in frontmatter so a timestamp can be
+   resolved back to it months later; it costs one line and is inert for the model.
+10. **Frontmatter carries the filters.** date, participants, topics, duration,
    `speakers_identified`, `summary_status` — the fields a retrieval layer filters
    on before it ever embeds anything, plus the two that tell a consumer how much
    to trust the rest.
