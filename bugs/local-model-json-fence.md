@@ -1,9 +1,10 @@
 ---
 kind: bug
 title: Summary is lost when a local model fences its JSON — response_format json_object is not enforced
-state: patched-locally
+state: fixed
 created: 2026-08-06
 updated: 2026-08-06
+fixed_in: 8f3c0a1
 ---
 
 # Summary is lost when a local model fences its JSON
@@ -60,7 +61,35 @@ never fences. It was enough to get a summary out of the 57-minute meeting, and i
 is **not** in the repo — it treats the symptom, and shipping it would make the
 real fix look done.
 
-## Proper fix
+## Fixed 2026-08-06
+
+`ChatResponseFormat.ForJsonSchema` on the OpenAI path, with a strict schema
+(`additionalProperties: false`, complete `required`) in `Services/SummarySchema.cs`.
+Azure keeps `ChatResponseFormat.Json` — the two providers are now carried together
+as `CompletionClient(IChatClient, ChatResponseFormat)` rather than assumed alike.
+
+Verified against llama.cpp on imp (Qwen3-30B-A3B via minrouter): the schema
+compiles to a grammar and output arrives unfenced. `SummarySchemaTests` asserts the
+schema cannot drift from `TranscriptSummary`, since a schema that omits a field
+forces the model to produce something we then silently drop.
+
+Two things were added that this report identified but did not ask for:
+
+- **Truncation is now detected**, not deserialized. `FinishReason == Length` throws
+  with a message naming the reasoning-token cause, instead of surfacing as a
+  JsonException far from its origin — the second failure with the same symptom
+  this report warned about.
+- **A labelled fence-unwrap remains as a last resort**, contrary to this report's
+  instinct to keep it out. The reasoning changed once the real fix shipped: it can
+  no longer make the fix look done, and it keeps a non-conforming server from
+  costing a full generation. It logs a warning naming the endpoint as the fault.
+
+Not verified on GLM-4.5-Air specifically. Grammar compilation happens in llama.cpp,
+not the model, so model identity does not affect whether the schema is accepted —
+but the laptop runs a different llama.cpp build, so if fencing recurs there, that
+build is the variable.
+
+## Proper fix (as originally specified)
 
 Use constrained decoding on the OpenAI-compatible path:
 `ChatResponseFormat.ForJsonSchema(...)` with a schema derived from

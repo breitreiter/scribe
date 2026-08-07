@@ -8,16 +8,34 @@ using Serilog;
 
 namespace Scribe.Services;
 
+/// <summary>
+/// The client plus how to ask it for JSON. The two travel together because the
+/// answer differs per provider: llama.cpp accepts response_format json_object and
+/// ignores it (bugs/local-model-json-fence.md), so the OpenAI path must send a
+/// schema, while Azure's Responses API is known-good with plain JSON mode and has
+/// not been verified under a schema.
+/// </summary>
+public record CompletionClient(IChatClient Client, ChatResponseFormat ResponseFormat);
+
 public static class ChatClientFactory
 {
     public const string AzureOpenAI = "AzureOpenAI";
     public const string OpenAI = "OpenAI";
 
-    public static IChatClient Create(CompletionSettings settings) =>
+    public static CompletionClient Create(CompletionSettings settings) =>
         settings.Provider switch
         {
-            AzureOpenAI => CreateAzure(settings.AzureOpenAI),
-            OpenAI => CreateOpenAICompatible(settings.OpenAI),
+            AzureOpenAI => new CompletionClient(
+                CreateAzure(settings.AzureOpenAI),
+                ChatResponseFormat.Json),
+
+            OpenAI => new CompletionClient(
+                CreateOpenAICompatible(settings.OpenAI),
+                ChatResponseFormat.ForJsonSchema(
+                    SummarySchema.Schema,
+                    SummarySchema.Name,
+                    "A grounded summary of a meeting transcript")),
+
             _ => throw new InvalidOperationException(
                 $"Unknown completion provider '{settings.Provider}'. Expected '{AzureOpenAI}' or '{OpenAI}'.")
         };

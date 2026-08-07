@@ -10,16 +10,25 @@ namespace Scribe.Services;
 
 public class SummaryService
 {
+    private const int MaxOutputTokens = 16000;
+
     private readonly IChatClient _chatClient;
+    private readonly ChatResponseFormat _responseFormat;
 
     public SummaryService(CompletionSettings settings)
         : this(ChatClientFactory.Create(settings))
     {
     }
 
-    public SummaryService(IChatClient chatClient)
+    public SummaryService(CompletionClient completion)
+        : this(completion.Client, completion.ResponseFormat)
+    {
+    }
+
+    public SummaryService(IChatClient chatClient, ChatResponseFormat? responseFormat = null)
     {
         _chatClient = chatClient;
+        _responseFormat = responseFormat ?? ChatResponseFormat.Json;
     }
 
     public async Task<TranscriptSummary> GenerateSummaryAsync(Transcript transcript)
@@ -38,8 +47,8 @@ public class SummaryService
         {
             // Left at the model default: o4-mini accepts only temperature 1. The ceiling is
             // high because reasoning models spend tokens internally before emitting output.
-            MaxOutputTokens = 16000,
-            ResponseFormat = ChatResponseFormat.Json
+            MaxOutputTokens = MaxOutputTokens,
+            ResponseFormat = _responseFormat
         };
 
         try
@@ -47,6 +56,17 @@ public class SummaryService
             var response = await _chatClient.GetResponseAsync(messages, chatOptions);
 
             Log.Debug("Response received with {MessageCount} messages", response.Messages.Count);
+
+            // A truncated response deserializes as a JsonException far from the cause.
+            // Reasoning models spend from this same allowance, so the ceiling is reached
+            // sooner than the visible output length suggests.
+            if (response.FinishReason == ChatFinishReason.Length)
+            {
+                throw new InvalidOperationException(
+                    $"The model hit the {MaxOutputTokens}-token output limit before finishing the summary. " +
+                    "If it is a reasoning model, reasoning tokens come out of the same allowance — " +
+                    "run the server with reasoning off, or raise MaxOutputTokens.");
+            }
 
             var assistantMessage = response.Messages.LastOrDefault();
             if (assistantMessage == null)
@@ -64,7 +84,7 @@ public class SummaryService
 
             Log.Debug("Received summary response ({Length} chars): {Response}", content.Length, content);
 
-            var summary = JsonSerializer.Deserialize<TranscriptSummary>(content, Json.CaseInsensitive);
+            var summary = JsonSerializer.Deserialize<TranscriptSummary>(Unwrap(content), Json.CaseInsensitive);
 
             if (summary == null)
             {
@@ -84,6 +104,23 @@ public class SummaryService
             Log.Error(ex, "Error generating summary");
             throw;
         }
+    }
+
+    // Last resort for a server that accepts response_format and does not honour it.
+    // The fix for that is a schema (see ChatClientFactory); this only keeps a
+    // non-conforming server from costing a full generation, and says so loudly.
+    private static string Unwrap(string content)
+    {
+        var trimmed = content.TrimStart();
+        if (!trimmed.StartsWith('`')) return content;
+
+        var start = content.IndexOf('{');
+        var end = content.LastIndexOf('}');
+        if (start < 0 || end <= start) return content;
+
+        Log.Warning("Model fenced its JSON despite a constrained response format — " +
+                    "the endpoint is not enforcing it. Unwrapping; see bugs/local-model-json-fence.md");
+        return content[start..(end + 1)];
     }
 
     private string GetSystemPrompt()
