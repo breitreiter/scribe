@@ -27,26 +27,45 @@ diarization's mistakes — before the meeting file is written.
 
 ## Current state
 
-`TranscriptFormatter` auto-assigns placeholder names (Alice, Bob, Charles…). The `transcript.Metadata.Speakers` dictionary and per-turn `speakerName` fields are already in the data model. The interactive prompt loop is not implemented.
+`TranscriptFormatter` assigns neutral `Speaker N` labels by order of first
+appearance (the Alice/Bob placeholder list was deleted in `7c7fe9d` — a name is a
+factual claim about who attended). `Transcript.Metadata.Speakers` maps display ID
+to label; per-turn `SpeakerName` is populated. Segments diarization could not
+attribute render as "Unidentified speaker" with ID 0 and no speaker-map entry.
+The interactive loop is not implemented.
 
 ## Proposed workflow
 
-After transcription completes and before HTML/transcript are saved, in `Program.cs` (file mode only):
+Runs in `Program.cs` after formatting and before the meeting file is written.
+Console I/O stays out of the service layer.
 
-1. Announce how many distinct speakers were detected.
-2. For each speaker ID (ordered by first appearance):
-   - Collect lines from that speaker until ≥20 words or 3 turns, whichever comes first.
-   - Display each line with its timestamp, truncated to console width − 4 with `…`.
-   - Prompt: `Name for this speaker? [leave blank to keep "Alice"]`
-   - If the user provides a name, update `transcript.Metadata.Speakers[id]` and all matching `turn.SpeakerName` fields.
-3. Re-save `transcript.json` and generate HTML with the updated names.
+1. Report how many distinct labels diarization produced, and warn when that
+   disagrees with the number of people the user expected.
+2. For each label, in order of first appearance:
+   - Show enough of that speaker's lines to recognise them — collect until ≥20
+     words or 3 turns, whichever comes first, each with its timestamp, truncated
+     to `AnsiConsole.Profile.Width - 4`.
+   - Prompt for a **name** and a **role**, both blank-able. Blank keeps
+     `Speaker N` and leaves `speakers_identified: false`.
+   - Offer **merge**: "this is the same person as <already-named speaker>" —
+     reassigns every turn of this label and drops it from the speaker map.
+   - Offer **flag as multiple**: this label is more than one person. Recorded on
+     the speaker, surfaced by the writer; not correctable without re-diarization.
+3. Set `speakers_identified: true` only if every surviving label got a name.
+4. Save, then write the meeting file.
 
 ## Key implementation notes
 
-- This goes between the `TranscribeAsync` call and the directory rename in `Program.cs` — names must be set before the transcript is saved and HTML generated. Currently `TranscriptionService` saves both; the speaker-assignment step either needs to happen inside the service (awkward — it's I/O bound to console) or `TranscriptionService` needs to defer final save/HTML-gen so `Program.cs` can inject names first.
-- Cleanest split: `TranscriptionService.TranscribeAsync` returns the `Transcript` object alongside the result, or exposes a second method to finalize (save + generate HTML) that `Program.cs` calls after the name loop. Avoids mixing console I/O into the service layer.
-- Console width truncation: `AnsiConsole.Profile.Width` gives the current terminal width.
-- Directory mode: skip the prompt (names are already saved in `transcript.json`); let the user edit the JSON directly if they want to rename speakers on a reprocess run.
+- Merge must renumber nothing: display IDs are already assigned, and rewriting
+  them would invalidate turn IDs the summary cites. Merging label B into A
+  rewrites B's turns to A and removes B from the map, leaving a gap in the ID
+  sequence. Gaps are fine; unstable citations are not.
+- Run the loop *before* summarization where possible, so the summary can use real
+  names and roles. On a reprocess with a cached summary, renaming means the
+  cached summary's speaker references go stale — either re-summarize or leave the
+  cache alone and say so.
+- Reprocess mode: names already in `.scribe/summary.json` are reused and not
+  re-asked. A dedicated re-identify command is out of scope.
 
 ## Out of scope
 
