@@ -13,23 +13,25 @@ read by a model — dense, self-describing, and built so that any chunk of it
 retrieved in isolation still means something. The HTML report is deleted.
 
 **The worked example is the spec:
-[`llm-native-output/2025-11-30-generative-ui-mechanics.example.md`](llm-native-output/2025-11-30-generative-ui-mechanics.example.md).**
-Read it before this plan. It is built from the real `generative-ui-meeting`
-sample — real turns, real summary content, real timestamps — so that a wrong
-assumption about the format shows up as a visibly wrong line rather than a
-paragraph everyone nods at. If that file is wrong, this plan is wrong.
+[`llm-native-output/2026-07-14-card-activation-onboarding.example.md`](llm-native-output/2026-07-14-card-activation-onboarding.example.md).**
+Read it before this plan. It is a six-speaker research session with roles — the
+real workload — written out in full so a wrong assumption shows up as a visibly
+wrong line rather than a paragraph everyone nods at. If that file is wrong, this
+plan is wrong.
+
+It replaced a two-speaker example on 2026-08-06 (recoverable at `12a6873`). The
+old one was deleted rather than kept alongside: two worked examples means no
+worked example, since neither is unambiguously the spec.
 
 Grilled 2026-08-05; six decisions settled (see "Settled by grilling" below) and
 folded into the worked example. Its filename demonstrates the output naming
 convention.
 
-> ⚠️ **The worked example is a 2-speaker meeting; the real workload is six.**
-> (2026-08-06.) The session driving this is a UX research interview with two
-> customers, the researcher, a PM, a developer, and a second designer. Rewriting
-> the example around that session is **step 1 of the build** — until it is done,
-> treat every "2 speakers" line in it as illustrative, not as spec.
+> ✅ **Rewritten for six speakers 2026-08-06.** The example is now a UX research
+> session with two customers, a researcher, a PM, and an engineer — plus one
+> diarization label flagged as holding more than one voice.
 >
-> Three decisions settled 2026-08-06, to be folded into the rewritten example:
+> Three decisions settled 2026-08-06 and folded into it:
 >
 > - **Roles are captured, not inferred.** The speaker-naming loop asks for a name
 >   *and* a role per speaker ("Speaker 3 → Dana Okafor, researcher"). Roles go in
@@ -44,6 +46,17 @@ convention.
 >   known-wrong speakers behind a confidence note.
 > - **`transcript.json` is demoted to `.scribe/summary.json`**, a reprocessing
 >   cache. The `.md` is the only top-level artifact.
+>
+> Two things the example decided that this plan had gotten wrong, both now
+> authoritative in the example file:
+>
+> - **`speakers_identified` is tri-state** (`all` | `partial` | `none`), not the
+>   bool specified below. Once a label can be flagged rather than named, "were
+>   the speakers identified" has a third honest answer, and `false` understates a
+>   file where five of six people are named.
+> - **Folded backchannels name their speaker** — `[T010 folded: Dana Okafor:
+>   Mm-hmm.]`, not the `[S2: Yeah.]` drafted in rule 8. With identified speakers,
+>   `S2` introduces a second competing speaker vocabulary into the same file.
 
 ## What changed about the problem
 
@@ -62,9 +75,13 @@ These are the non-obvious commitments in the worked example. They are the whole
 value of the format; if they erode, the file is just a transcript dump.
 
 1. **Every section restates its context, at chunk granularity.** Each `##`
-   section opens with a full italic stamp — *"(From the 2025-11-30 meeting on
-   generative UI, 2 unidentified speakers.)"* — and each `###` subsection opens
-   with a compact one — *"(GenUI meeting, 2025-11-30.)"*. A retrieved chunk that
+   section opens with a full italic stamp naming date, participants **and their
+   roles** — *"(From the 2026-07-14 card activation onboarding research session,
+   6 participants: Dana Okafor (researcher), Priya Raman and Tom Alderidge
+   (customers)…)"* — and each `###` subsection opens with a compact one —
+   *"(Card activation onboarding research session, 2026-07-14.)"*. Roles belong
+   in the stamp because "the customer said X" is the retrievable claim and a bare
+   name cannot carry it. A retrieved chunk that
    says "we decided to defer it" and nothing else is worse than useless; it is
    confidently misleading. Stamping `##` alone is not enough: chunkers usually
    split at the deepest heading, so the common chunk lands *inside* a `###` and
@@ -164,8 +181,11 @@ existing meeting directories keep working (shared with the transcription plan).
   a single topic titled `"Full Transcript"`; real segmentation is the load-
   bearing new capability, since topic boundaries are what make chunk boundaries
   fall in sensible places.
-- `TranscriptMetadata.SpeakersIdentified` — bool, false until the naming loop
-  from `speaker-identification.md` runs. Drives rule 7's header note.
+- `TranscriptMetadata.SpeakersIdentified` — tri-state `all` | `partial` | `none`
+  (see the worked example; this was a bool before merge/flag existed). Drives
+  rule 7's header note.
+- Speaker entries gain `Role` and a `FlaggedMultipleVoices` marker, since the
+  naming loop now captures both.
 - `TranscriptMetadata.SummaryStatus` — `ok` | `unavailable`, so the writer can
   distinguish "no decisions" from "never looked for decisions".
 - `TranscriptTurn.FoldedBackchannels` — the absorbed interjections with their
@@ -288,8 +308,8 @@ this plan when you do it.
    into summary + segmentation calls; assert against truncation rather than
    discovering it mid-object. Closes `bugs/local-model-json-fence.md`. Everything
    below enlarges the model response, so this lands first. Commit.
-1. **Rewrite the worked example** around the six-speaker research session, with
-   roles in frontmatter and stamps. The `.md` leads; grill it before building.
+1. ~~Rewrite the worked example around the six-speaker research session.~~ Done
+   2026-08-06. **Grill it before building** — that pass has not happened.
 2. Model changes: turn IDs, decisions, open questions, topic ranges,
    `speakersIdentified`, `summaryStatus`, roles on the speaker map. Commit.
 3. Backchannel folding in `TranscriptFormatter` + tests (pre-fold ID numbering is
