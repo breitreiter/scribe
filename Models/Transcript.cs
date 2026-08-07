@@ -70,6 +70,13 @@ public class TranscriptMetadata
     [JsonPropertyName("meetingPurpose")]
     public string? MeetingPurpose { get; set; }
 
+    /// <summary>
+    /// True once a human confirmed date, title and purpose. Keeps a reprocess from
+    /// re-asking, and marks the difference between a guessed date and a known one.
+    /// </summary>
+    [JsonPropertyName("identityConfirmed")]
+    public bool IdentityConfirmed { get; set; }
+
     /// <summary>Filename of the recording, so a timestamp in the output stays resolvable.</summary>
     [JsonPropertyName("mediaFile")]
     public string? MediaFile { get; set; }

@@ -150,13 +150,6 @@ class Program
                     transcript.Summary = summary;
                     transcript.Metadata.SummaryStatus = SummaryStatus.Ok;
 
-                    if (!string.IsNullOrWhiteSpace(summary.OneLiner))
-                    {
-                        var title = summary.OneLiner.TrimEnd('.', '!', '?').Trim();
-                        if (title.Length > 100) title = title[..100].TrimEnd();
-                        transcript.Metadata.MeetingTitle = title;
-                    }
-
                     await File.WriteAllTextAsync(transcriptPath,
                         JsonSerializer.Serialize(transcript, Json.Indented));
                     Log.Information("AI summary generated and saved");
@@ -174,6 +167,11 @@ class Program
                 Log.Information("Skipping summary generation - already exists with {KeyPointCount} key points",
                     transcript.Summary.KeyPoints.Count);
             }
+
+            ConfirmMeetingIdentity(transcript, outputDirectory, rawJsonPath);
+
+            await File.WriteAllTextAsync(transcriptPath,
+                JsonSerializer.Serialize(transcript, Json.Indented));
 
             var meetingFilePath = Path.Combine(outputDirectory, MeetingMarkdownWriter.FileName(transcript));
             await File.WriteAllTextAsync(meetingFilePath, MeetingMarkdownWriter.Write(transcript));
@@ -208,6 +206,67 @@ class Program
                 File.Delete(logFilePath);
             }
         }
+    }
+
+    /// <summary>
+    /// Confirms the three values that cannot be recovered from the audio: when the
+    /// meeting happened, what it was called, and why it was held. Each is prompted with
+    /// a best guess pre-filled, so confirming is one keypress.
+    ///
+    /// Values already stored (a reprocess) are kept and not re-asked. Without a terminal
+    /// the guesses stand — a scripted run must not block on a prompt.
+    /// </summary>
+    private static void ConfirmMeetingIdentity(Transcript transcript, string directory, string rawJsonPath)
+    {
+        var meta = transcript.Metadata;
+
+        meta.MediaFile ??= MeetingDefaults.FindMediaFile(directory);
+
+        var guessedDate = MeetingDefaults.GuessDate(directory, rawJsonPath);
+        var guessedTitle = MeetingDefaults.TitleFrom(transcript.Summary.OneLiner, guessedDate);
+
+        var alreadyConfirmed = meta.IdentityConfirmed;
+
+        if (alreadyConfirmed || Console.IsInputRedirected)
+        {
+            // RecordingDate is the processing date until something better is known.
+            if (!alreadyConfirmed)
+            {
+                meta.RecordingDate = guessedDate;
+                meta.MeetingTitle = guessedTitle;
+            }
+
+            if (Console.IsInputRedirected && !alreadyConfirmed)
+                Log.Information("No terminal; using guessed date {Date} and title {Title}", guessedDate, guessedTitle);
+
+            return;
+        }
+
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine("[bold yellow]Meeting details[/]");
+        if (meta.MediaFile != null)
+            AnsiConsole.MarkupLine($"  Recording: [cyan]{meta.MediaFile.EscapeMarkup()}[/]");
+
+        meta.RecordingDate = AnsiConsole.Prompt(
+            new TextPrompt<string>("Meeting [cyan]date[/]:")
+                .DefaultValue(guessedDate)
+                .Validate(value => MeetingDefaults.TryParseDate(value, out _)
+                    ? ValidationResult.Success()
+                    : ValidationResult.Error("[red]Use YYYY-MM-DD[/]")));
+
+        meta.MeetingTitle = AnsiConsole.Prompt(
+            new TextPrompt<string>("Meeting [cyan]title[/]:").DefaultValue(guessedTitle));
+
+        // Why a meeting happened is frequently absent from what was said in it, and it
+        // is the context that makes a retrieved chunk actionable.
+        var purpose = AnsiConsole.Prompt(
+            new TextPrompt<string>("Meeting [cyan]purpose[/] [dim](optional)[/]:")
+                .AllowEmpty()
+                .DefaultValue(meta.MeetingPurpose ?? string.Empty));
+
+        meta.MeetingPurpose = string.IsNullOrWhiteSpace(purpose) ? null : purpose.Trim();
+        meta.IdentityConfirmed = true;
+        AnsiConsole.WriteLine();
     }
 
     // Returns null and prints an error if the raw JSON cannot be parsed.
