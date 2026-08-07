@@ -3,7 +3,7 @@ kind: plan
 title: LLM-native output — a single meeting markdown file replaces the HTML report
 state: exploring
 created: 2026-08-05
-updated: 2026-08-05
+updated: 2026-08-06
 ---
 
 # LLM-native output — a single meeting markdown file replaces the HTML report
@@ -23,24 +23,27 @@ Grilled 2026-08-05; six decisions settled (see "Settled by grilling" below) and
 folded into the worked example. Its filename demonstrates the output naming
 convention.
 
-> ⚠️ **The worked example is a 2-speaker meeting, and the real workload is not.**
-> (Noted 2026-08-06.) The session that prompted picking this back up is a UX
-> research interview with **six** speakers: two customers being interviewed, the
-> researcher, a PM, a developer, and a second designer. Two things the current
-> example does not handle:
+> ⚠️ **The worked example is a 2-speaker meeting; the real workload is six.**
+> (2026-08-06.) The session driving this is a UX research interview with two
+> customers, the researcher, a PM, a developer, and a second designer. Rewriting
+> the example around that session is **step 1 of the build** — until it is done,
+> treat every "2 speakers" line in it as illustrative, not as spec.
 >
-> 1. **Roles.** "Speaker 1…6" is nearly useless for retrieval when what a chunk
->    needs is *the customer said X, the PM committed to Y*. Roles are high-signal
->    frontmatter and probably belong in the per-section stamps too.
-> 2. **Diarization error.** Six voices on a single-channel recording will
->    over- and under-cluster: one person split across two labels, two people
->    merged into one. `speaker-identification.md`'s naming loop can only rename,
->    so a merge/split affordance is needed — and the format must be able to say
->    "labels are unreliable" rather than implying clean attribution.
+> Three decisions settled 2026-08-06, to be folded into the rewritten example:
 >
-> Rewriting the worked example around a six-speaker research session is the next
-> design step. Until then, treat every "2 speakers" line in the example as
-> illustrative, not as the spec.
+> - **Roles are captured, not inferred.** The speaker-naming loop asks for a name
+>   *and* a role per speaker ("Speaker 3 → Dana Okafor, researcher"). Roles go in
+>   frontmatter and in the section stamps, because "the customer said X, the PM
+>   committed to Y" is the retrieval that matters and "Speaker 4" cannot support
+>   it. Inferring roles from what people say was rejected: a wrong guess is a
+>   fabricated attribution, which is the same failure rule 7 exists to prevent.
+> - **Diarization errors get fixed, not disclaimed.** The naming loop gains merge
+>   (two labels are one person) and split/flag (one label is two people). Six
+>   voices on a single-channel recording will mis-cluster; correcting at the
+>   source lets the file assert attribution honestly instead of shipping
+>   known-wrong speakers behind a confidence note.
+> - **`transcript.json` is demoted to `.scribe/summary.json`**, a reprocessing
+>   cache. The `.md` is the only top-level artifact.
 
 ## What changed about the problem
 
@@ -208,6 +211,22 @@ Watch the quality of local topic segmentation specifically — structured JSON
 segmentation over a long transcript is where a smaller model gets sloppy. If it
 degrades, the Azure path is the fallback, which is a reason to keep it.
 
+**Constrained decoding, not prompt pleading.** `bugs/local-model-json-fence.md`
+established that llama.cpp accepts `response_format: {"type":"json_object"}` and
+does not act on it, while `json_schema` is honoured and yields clean output. The
+OpenAI path must use `ChatResponseFormat.ForJsonSchema(...)` derived from
+`TranscriptSummary`. Azure keeps `ChatResponseFormat.Json` until the Responses
+API is verified under a schema — do not assume the two providers behave alike.
+
+**Split into two calls: summary, then topic segmentation.** Everything this plan
+adds makes the response longer and more structured, on exactly the axis that just
+failed. Real numbers from the first full run: a 57-minute meeting is 227 turns and
+≈13.7k prompt tokens, and generation took 196 s. Two calls halve the output per
+call (the truncation risk, since `MaxOutputTokens = 16000` is sized for o4-mini's
+*reasoning* budget and local reasoning models spend from the same allowance), and
+they isolate failure — sloppy segmentation should not discard a summary that
+already cost three minutes.
+
 The rewritten prompt and schema, beyond the new fields:
 
 - **It must segment the meeting into topics** with start/end turn IDs. This is
@@ -259,23 +278,31 @@ this plan when you do it.
 
 ## Steps
 
-1. ~~Grill the worked example.~~ Done 2026-08-05; see "Settled by grilling".
-2. Removal pass — HTML generator, template, paths, doc sweep, plan state flip.
-   Scribe temporarily emits only `transcript.json`. Commit.
-3. Model changes: turn IDs, decisions, open questions, topic ranges,
-   `speakersIdentified`, `summaryStatus`, folded backchannels. Drop the
-   hardcoded speaker-name list. Commit.
-4. Backchannel folding in `TranscriptFormatter` + tests (pre-fold ID numbering
-   is the part worth asserting). Commit.
-5. `MeetingMarkdownWriter` + unit test asserting output matches the worked
-   example's structure for the fixture — including the degraded variant, which
-   is the branch most likely to rot untested. Commit.
-6. Summarizer: OpenAI-compatible endpoint config, prompt/schema rewrite, topic
-   segmentation + validation, graceful degradation. Commit.
+0. **JSON contract first.** `ForJsonSchema` on the OpenAI path; split the AI pass
+   into summary + segmentation calls; assert against truncation rather than
+   discovering it mid-object. Closes `bugs/local-model-json-fence.md`. Everything
+   below enlarges the model response, so this lands first. Commit.
+1. **Rewrite the worked example** around the six-speaker research session, with
+   roles in frontmatter and stamps. The `.md` leads; grill it before building.
+2. Model changes: turn IDs, decisions, open questions, topic ranges,
+   `speakersIdentified`, `summaryStatus`, roles on the speaker map. Commit.
+3. Backchannel folding in `TranscriptFormatter` + tests (pre-fold ID numbering is
+   the part worth asserting). Commit.
+4. `MeetingMarkdownWriter` + unit test against the worked example, **including the
+   degraded no-summary variant**, which is the branch most likely to rot untested.
+   Commit.
+5. Summarizer prompt/schema rewrite, topic segmentation with contiguity
+   validation and neighbour-extension repair. Commit.
+6. Speaker identification: naming loop with **name + role**, plus merge and
+   split/flag. Sets `speakers_identified: true`. Commit.
 7. Interactive date/title/purpose prompts with pre-filled defaults. Commit.
-8. Output directory restructure (`.scribe/`, `<date>-<slug>.md`) + reprocess
-   back-compat. Commit.
+8. Output restructure: `.scribe/` for machinery, `<date>-<slug>.md` as the
+   deliverable, `transcript.json` → `.scribe/summary.json`, reprocess back-compat
+   for existing meeting directories. Commit.
 9. README/CLAUDE.md rewrite to describe the new deliverable.
+
+Done already (2026-08-06): the removal pass — HTML generator, template, paths,
+doc sweep, plan state flips — in commit `cd2fcb3`.
 
 ## Settled by grilling (2026-08-05)
 

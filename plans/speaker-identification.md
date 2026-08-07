@@ -3,12 +3,27 @@ kind: plan
 title: Interactive Speaker Identification
 state: exploring
 created: 2026-05-15
-updated: 2026-05-15
+updated: 2026-08-06
 ---
 
 # Interactive Speaker Identification
 
-After transcription, walk the user through naming each detected speaker before saving and generating the report.
+Walk the user through identifying each detected speaker — and correcting
+diarization's mistakes — before the meeting file is written.
+
+> **Revised 2026-08-06.** Written for a 2-speaker recording; the real workload is
+> a six-person research session. Two additions, settled with the user:
+>
+> - **Capture a role alongside the name** ("Speaker 3 → Dana Okafor, researcher").
+>   Roles are the field that makes a retrieved chunk actionable — "the customer
+>   said X" versus "Speaker 4 said X". Never inferred from the transcript; a
+>   wrong guess is a fabricated attribution.
+> - **Merge and split, not just rename.** Six voices on a single-channel
+>   recording mis-cluster: one person arrives as two labels, or two quiet people
+>   collapse into one. Rename-only cannot express either. Merge reassigns every
+>   turn of label B to label A. Split cannot be done properly without
+>   re-diarization, so it *flags* the label as containing multiple speakers,
+>   which the writer surfaces rather than asserting clean attribution.
 
 ## Current state
 
@@ -36,4 +51,6 @@ After transcription completes and before HTML/transcript are saved, in `Program.
 ## Out of scope
 
 - AI-assisted speaker identification (matching voice to known participants list).
+- True re-diarization of a split label — that needs the audio, which scribe no
+  longer touches. Flagging is the honest ceiling.
 - Retroactively renaming speakers in an existing transcript via a dedicated command.
