@@ -4,7 +4,7 @@ title: Summary is lost when a local model fences its JSON — response_format js
 state: fixed
 created: 2026-08-06
 updated: 2026-08-06
-fixed_in: 8f3c0a1
+fixed_in: 3e7918c
 ---
 
 # Summary is lost when a local model fences its JSON
